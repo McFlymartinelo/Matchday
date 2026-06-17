@@ -47,7 +47,17 @@ app.get('*', (_req, res) => {
   res.sendFile(join(__dirname, '../public/index.html'));
 });
 
-async function start() {
+function scheduleJobs() {
+  cron.schedule('0 */6 * * *', () => syncAllCompetitions().catch(console.error));
+  cron.schedule('*/5 * * * *', () => syncLiveScores().catch(console.error));
+  cron.schedule('0 6 * * *', () => syncAllStandings().catch(console.error));
+  configureWebPush();
+  cron.schedule('*/5 * * * *', () => {
+    sendPredictionReminders().catch(err => console.error('Rappels push:', err.message));
+  });
+}
+
+async function initData() {
   await migrate();
   await seedCompetitions();
   await cleanupTestMatches();
@@ -55,7 +65,7 @@ async function start() {
   if (process.env.BSD_API_TOKEN?.trim()) {
     try {
       await syncLeagueIds();
-      const n = await syncAllCompetitions();
+      await syncAllCompetitions();
       console.log('Sync BSD : calendrier importé');
     } catch (err) {
       console.warn('Sync BSD échouée :', err.message);
@@ -67,24 +77,22 @@ async function start() {
     await seedDemoMatches();
     console.log('Matchs de démo chargés (BSD indisponible ou vide)');
   }
+}
 
-  // Sync fixtures toutes les 6h
-  cron.schedule('0 */6 * * *', () => syncAllCompetitions().catch(console.error));
-  // Scores live toutes les 5 min
-  cron.schedule('*/5 * * * *', () => syncLiveScores().catch(console.error));
-  // Classements 1x/jour à 6h
-  cron.schedule('0 6 * * *', () => syncAllStandings().catch(console.error));
-
-  // Rappels pronostic ~1h avant le match (toutes les 5 min)
-  configureWebPush();
-  cron.schedule('*/5 * * * *', () => {
-    sendPredictionReminders().catch(err => console.error('Rappels push:', err.message));
-  });
-
+async function start() {
   app.listen(PORT, () => {
     const host = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
     console.log(`Matchday démarré sur ${host}`);
   });
+
+  scheduleJobs();
+
+  try {
+    await initData();
+    console.log('Base de données prête');
+  } catch (err) {
+    console.error('Init base de données échouée :', err.message);
+  }
 }
 
 start().catch(err => {

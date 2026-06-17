@@ -1,6 +1,6 @@
 import { api, showToast } from './api.js';
 
-const SW_URL = '/sw.js?v=5';
+const SW_URL = '/sw.js?v=6';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
