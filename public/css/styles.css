@@ -439,7 +439,7 @@ body.auth-page {
   cursor: pointer; border: none; background: none; font-family: inherit;
 }
 .nav-item.active { color: var(--pl); }
-.nav-item div:first-child { font-size: 17px; margin-bottom: 3px; }
+.nav-item div:first-child { font-size: 20px; margin-bottom: 3px; line-height: 1; }
 
 /* Chat */
 .chat-bubble {

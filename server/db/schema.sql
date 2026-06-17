@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS matches (
   matchday INTEGER,
   kickoff_at TEXT NOT NULL,
   season TEXT DEFAULT '2025-2026',
+  home_bsd_team_id INTEGER,
+  away_bsd_team_id INTEGER,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 

@@ -75,6 +75,22 @@ export async function migrate() {
   for (const stmt of statements) {
     await run(stmt);
   }
+  await ensureMatchColumns();
+}
+
+async function ensureMatchColumns() {
+  await addColumnIfMissing('matches', 'home_bsd_team_id', 'INTEGER');
+  await addColumnIfMissing('matches', 'away_bsd_team_id', 'INTEGER');
+}
+
+async function addColumnIfMissing(table, column, type) {
+  const cols = await all(`PRAGMA table_info(${table})`);
+  if (cols.some(c => c.name === column)) return;
+  try {
+    await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch (err) {
+    if (!/duplicate column/i.test(String(err.message))) throw err;
+  }
 }
 
 export async function closeDb() {

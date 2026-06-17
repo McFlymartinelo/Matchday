@@ -492,14 +492,43 @@ function compPillsHtml() {
   }).join('')}</div>`;
 }
 
+function normTeamName(name) {
+  return (name ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function buildTeamLogoMap(groupId) {
+  const map = new Map();
+  try {
+    const clubs = await groups.clubs(groupId);
+    for (const t of clubs) {
+      map.set(normTeamName(t.team_name), t.team_id);
+      if (t.short_name) map.set(normTeamName(t.short_name), t.team_id);
+    }
+  } catch { /* ignore */ }
+  return map;
+}
+
+function resolveBsdTeamId(match, side, logoMap) {
+  const direct = side === 'home' ? match.home_bsd_team_id : match.away_bsd_team_id;
+  if (direct) return Number(direct);
+  const name = side === 'home' ? match.home_team_name : match.away_team_name;
+  return logoMap.get(normTeamName(name)) ?? null;
+}
+
 function navHtml() {
   const items = [
-    { id: 'matches', icon: '⊞', label: 'Matchs' },
+    { id: 'matches', icon: '📋', label: 'Matchs' },
     { id: 'championships', icon: '🏆', label: 'Championnats' },
-    { id: 'standings', icon: '≡', label: 'Classement' },
-    { id: 'chat', icon: '◌', label: 'Chat' },
+    { id: 'standings', icon: '📊', label: 'Classement' },
+    { id: 'chat', icon: '💬', label: 'Chat' },
     { id: 'seasonxi', icon: '⚽', label: 'Mon 11' },
-    { id: 'profile', icon: '○', label: 'Profil' },
+    { id: 'profile', icon: '👤', label: 'Profil' },
   ];
   return `<div class="bottom-nav">${items.map(i =>
     `<button class="nav-item ${state.screen === i.id ? 'active' : ''}" data-nav="${i.id}">
@@ -539,7 +568,10 @@ async function renderMatches(el) {
   el.innerHTML = '<div class="empty-state">Chargement…</div>';
   try {
     const params = state.activeComp ? { competitionId: state.activeComp } : {};
-    const matchList = await matches.list(state.group.id, params);
+    const [matchList, logoMap] = await Promise.all([
+      matches.list(state.group.id, params),
+      buildTeamLogoMap(state.group.id),
+    ]);
 
     if (!matchList.length) {
       el.innerHTML = `<div class="section-card"><div class="empty-state">Aucun match pour ce championnat.<br>La sync BSD se fait toutes les 6h.</div></div>`;
@@ -572,7 +604,7 @@ async function renderMatches(el) {
           <div class="jn"><div class="comp-flag" style="background:${cc.bg};color:${cc.color}">${comp.code ?? comp.comp_code}</div>Journée ${md}<span class="season-tag">${ms[0].season ?? comp.saison_active ?? '2025-2026'}</span></div>
           ${cd ? `<div class="countdown-bubble">${cd}</div>` : allLocked ? '<div class="countdown-bubble locked">Terminée</div>' : ''}
         </div>
-        ${ms.map(m => matchCardHtml(m, cc)).join('')}
+        ${ms.map(m => matchCardHtml(m, cc, logoMap)).join('')}
       </div>`;
     }).join('');
 
@@ -587,11 +619,13 @@ async function renderMatches(el) {
   }
 }
 
-function matchCardHtml(m, cc) {
+function matchCardHtml(m, cc, logoMap) {
   const pred = m.prediction;
   const h = pred?.home_score ?? '';
   const a = pred?.away_score ?? '';
   const filled = h !== '' && a !== '';
+  const homeTeamId = resolveBsdTeamId(m, 'home', logoMap);
+  const awayTeamId = resolveBsdTeamId(m, 'away', logoMap);
 
   let bottom = 'à toi de jouer';
   let bottomClass = 'open';
@@ -606,7 +640,7 @@ function matchCardHtml(m, cc) {
 
   return `<div class="match-card" data-match="${m.id}">
     <div class="match-top">
-      <div class="team">${teamCrest(m.home_team_name, m.comp_code)}${m.home_team_name}</div>
+      <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}${m.home_team_name}</div>
       <div class="score-mid">
         <div class="score-pill ${filled ? 'filled' : ''}" style="${filled ? `color:${cc.color};border-color:${cc.color};background:${cc.bg}` : ''}">
           ${m.isLocked ? (h !== '' ? h : '–') : `<input type="number" min="0" max="20" data-side="home" data-match="${m.id}" value="${h}" placeholder="–">`}
@@ -615,7 +649,7 @@ function matchCardHtml(m, cc) {
           ${m.isLocked ? (a !== '' ? a : '–') : `<input type="number" min="0" max="20" data-side="away" data-match="${m.id}" value="${a}" placeholder="–">`}
         </div>
       </div>
-      <div class="team right">${m.away_team_name}${teamCrest(m.away_team_name, m.comp_code)}</div>
+      <div class="team right">${m.away_team_name}${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
     </div>
     <div class="match-bottom ${bottomClass}" style="${bottomClass === 'points' ? `color:${cc.color}` : ''}">${bottom}</div>
   </div>`;

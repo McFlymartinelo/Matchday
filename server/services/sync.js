@@ -66,13 +66,16 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
 
       await run(
         `INSERT INTO matches (bsd_event_id, competition_id, home_team_name, away_team_name,
-          home_score, away_score, status, matchday, kickoff_at, season, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          home_bsd_team_id, away_bsd_team_id, home_score, away_score, status, matchday, kickoff_at, season, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(bsd_event_id) DO UPDATE SET
+           home_team_name = excluded.home_team_name, away_team_name = excluded.away_team_name,
+           home_bsd_team_id = excluded.home_bsd_team_id, away_bsd_team_id = excluded.away_bsd_team_id,
            home_score = excluded.home_score, away_score = excluded.away_score,
            status = excluded.status, matchday = excluded.matchday,
            kickoff_at = excluded.kickoff_at, season = excluded.season, updated_at = datetime('now')`,
         [norm.bsd_event_id, norm.competition_id, norm.home_team_name, norm.away_team_name,
+         norm.home_bsd_team_id, norm.away_bsd_team_id,
          norm.home_score, norm.away_score, norm.status, norm.matchday, norm.kickoff_at, seasonLabel]
       );
       count++;

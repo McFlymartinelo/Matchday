@@ -196,6 +196,8 @@ export function normalizeEvent(event, competitionId) {
     competition_id: competitionId,
     home_team_name: event.home_team ?? 'Domicile',
     away_team_name: event.away_team ?? 'Extérieur',
+    home_bsd_team_id: event.home_team_id ?? null,
+    away_bsd_team_id: event.away_team_id ?? null,
     home_score: event.home_score ?? null,
     away_score: event.away_score ?? null,
     status: mapStatus(event.status),
