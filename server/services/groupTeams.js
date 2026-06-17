@@ -26,6 +26,7 @@ export async function getGroupTeamMap(groupId) {
           competition_id: c.id,
           comp_code: c.code,
           comp_nom: c.nom,
+          logo_url: `https://sports.bzzoiro.com/img/team/${t.id}/?bg=transparent`,
         });
       }
     } catch {

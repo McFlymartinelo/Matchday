@@ -71,6 +71,11 @@ export function formatClubAvatar(team) {
   return `club:${team.team_id}:${team.comp_code}:${label}`;
 }
 
+export function bsdTeamLogoUrl(teamId) {
+  if (!teamId) return null;
+  return `https://sports.bzzoiro.com/img/team/${teamId}/?bg=transparent`;
+}
+
 export function clubCrestLetters(label, teamName) {
   const src = (label || teamName || '???').replace(/[^a-zA-Z0-9]/g, '');
   if (src.length <= 3) return src.toUpperCase() || '???';
@@ -78,10 +83,22 @@ export function clubCrestLetters(label, teamName) {
 }
 
 export function renderClubCrestHtml(club, { size = 'md', title = '' } = {}) {
-  const cc = compColors(club.compCode ?? 'L1');
-  const letters = clubCrestLetters(club.label, club.teamName);
+  const teamId = club.teamId ?? club.team_id;
+  const logoUrl = club.logoUrl ?? club.logo_url ?? bsdTeamLogoUrl(teamId);
+  const cc = compColors(club.compCode ?? club.comp_code ?? 'L1');
+  const letters = clubCrestLetters(club.label, club.teamName ?? club.team_name);
   const cls = size === 'lg' ? 'avatar-crest avatar-crest-lg' : size === 'sm' ? 'avatar-crest avatar-crest-sm' : 'avatar-crest';
-  return `<span class="${cls}" style="background:${cc.bg};color:${cc.color}" title="${title || club.teamName || club.label}">${letters}</span>`;
+  const tip = (title || club.teamName || club.team_name || club.label || '').replace(/"/g, '&quot;');
+
+  if (logoUrl) {
+    return `<span class="avatar-crest-wrap" title="${tip}">
+      <img src="${logoUrl}" alt="" class="avatar-crest-img ${cls}" loading="lazy"
+        onerror="this.classList.add('hidden');this.nextElementSibling?.classList.remove('hidden')">
+      <span class="${cls} avatar-crest-fallback hidden" style="background:${cc.bg};color:${cc.color}">${letters}</span>
+    </span>`;
+  }
+
+  return `<span class="${cls}" style="background:${cc.bg};color:${cc.color}" title="${tip}">${letters}</span>`;
 }
 
 export function renderAvatarHtml(avatar, displayName, profileColor = '#6B3FD6', size = 'lg') {

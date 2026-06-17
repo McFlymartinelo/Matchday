@@ -51,7 +51,10 @@ function scheduleJobs() {
   cron.schedule('0 */6 * * *', () => syncAllCompetitions().catch(console.error));
   cron.schedule('*/5 * * * *', () => syncLiveScores().catch(console.error));
   cron.schedule('0 6 * * *', () => syncAllStandings().catch(console.error));
-  configureWebPush();
+  const vapid = configureWebPush();
+  if (!vapid.ok && process.env.NODE_ENV === 'production') {
+    console.warn('⚠️  Push notifications désactivées :', vapid.error);
+  }
   cron.schedule('*/5 * * * *', () => {
     sendPredictionReminders().catch(err => console.error('Rappels push:', err.message));
   });

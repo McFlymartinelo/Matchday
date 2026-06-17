@@ -195,8 +195,9 @@ export function openNotificationPanel(anchorEl, { onEnabled, onDisabled }) {
       <div class="notif-panel-head"><strong>Rappels Matchday</strong></div>
       <div class="notif-panel-row">Permission : <span>${status.permission}</span></div>
       <div class="notif-panel-row">Push abonné : <span>${status.subscription ? 'oui' : 'non'}</span></div>
-      <div class="notif-panel-row">Serveur VAPID : <span>${status.vapidConfigured ? 'ok' : 'manquant'}</span></div>
-      <p class="notif-panel-hint">Même si Windows/Opera bloque le push, tu verras une <strong>bannière violette</strong> et un toast 1h avant chaque match non pronostiqué.</p>
+      <div class="notif-panel-row">Serveur VAPID : <span class="${status.vapidConfigured ? 'notif-ok' : 'notif-warn'}">${status.vapidConfigured ? 'ok' : 'manquant'}</span></div>
+      ${!status.vapidConfigured ? `<p class="notif-panel-hint notif-panel-warn">Ajoute <code>VAPID_PUBLIC_KEY</code> et <code>VAPID_PRIVATE_KEY</code> dans les variables Render (ou ton <code>.env</code> local). Génère-les avec <code>npm run vapid:keys</code>.</p>` : ''}
+      <p class="notif-panel-hint">Sur iPhone : installe l'app sur l'écran d'accueil (PWA) pour recevoir les push. Sinon la bannière violette reste active 1h avant chaque match.</p>
       <div class="notif-panel-actions">
         ${status.enabled
           ? `<button type="button" class="btn btn-secondary" id="notif-test">Tester</button>

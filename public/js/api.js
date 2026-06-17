@@ -136,9 +136,19 @@ export function compColors(code) {
   return map[code] ?? { color: 'var(--pl)', bg: 'var(--pl-bg)', cls: 'pl' };
 }
 
-export function teamCrest(name, compCode) {
+export function teamCrest(name, compCode, teamId = null) {
   const c = compColors(compCode);
   const letters = (name || '???').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || '???';
+  const logoUrl = teamId ? `https://sports.bzzoiro.com/img/team/${teamId}/?bg=transparent` : null;
+
+  if (logoUrl) {
+    return `<span class="crest-wrap">
+      <img src="${logoUrl}" alt="" class="crest-img" loading="lazy"
+        onerror="this.classList.add('hidden');this.nextElementSibling?.classList.remove('hidden')">
+      <span class="crest-sm crest-fallback hidden" style="background:${c.bg};color:${c.color}">${letters}</span>
+    </span>`;
+  }
+
   return `<div class="crest-sm" style="background:${c.bg};color:${c.color}">${letters}</div>`;
 }
 

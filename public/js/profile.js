@@ -60,7 +60,13 @@ function renderClubGrid(teams, currentAvatar, filterCompId = null) {
 
     const crest = renderClubCrestHtml(
 
-      { compCode: team.comp_code, label: team.short_name, teamName: team.team_name },
+      {
+        teamId: team.team_id,
+        logoUrl: team.logo_url,
+        compCode: team.comp_code,
+        label: team.short_name,
+        teamName: team.team_name,
+      },
 
       { title: team.team_name }
 
