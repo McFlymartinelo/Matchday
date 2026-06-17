@@ -1,0 +1,28 @@
+{
+  "name": "matchday",
+  "version": "1.0.0",
+  "description": "Application web de pronostics football entre amis",
+  "type": "module",
+  "main": "server/index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "migrate": "node server/db/migrate.js",
+    "seed": "node server/db/seed.js",
+    "setup": "npm run migrate && npm run seed",
+    "test": "node --test",
+    "test:notifications": "node scripts/test-notification-reminder.js",
+    "vapid:keys": "node scripts/generate-vapid-keys.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "web-push": "^3.6.7"
+  }
+}

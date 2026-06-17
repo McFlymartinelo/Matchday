@@ -1,0 +1,31 @@
+# Blueprint Render — Matchday
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: matchday
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install && npm run setup
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BSD_API_TOKEN
+        sync: false
+      - key: BSD_BASE_URL
+        value: https://sports.bzzoiro.com
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:admin@matchday.app
