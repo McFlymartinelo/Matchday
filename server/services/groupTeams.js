@@ -17,8 +17,14 @@ export async function getGroupTeamMap(groupId) {
   const map = new Map();
   for (const c of comps) {
     try {
+      const allowedTeams = await bsd.getStandingTeamNames(c.bsd_league_id);
       const data = await bsd.getTeams({ league_id: c.bsd_league_id, limit: 200 });
       for (const t of bsd.extractResults(data)) {
+        const names = [t.name, t.short_name].filter(Boolean);
+        const inStandings = !allowedTeams?.size
+          || names.some(n => allowedTeams.has(bsd.normalizeTeamName(n)));
+        if (!inStandings) continue;
+
         map.set(t.id, {
           team_id: t.id,
           team_name: t.name ?? t.short_name,
