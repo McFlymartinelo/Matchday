@@ -54,15 +54,40 @@ router.get('/mine', authRequired, async (req, res) => {
   res.json(groups);
 });
 
+router.get('/public/list', async (_req, res) => {
+  const rows = await all(
+    `SELECT g.id, g.name, COUNT(gm.user_id) AS member_count
+     FROM groups g
+     LEFT JOIN group_members gm ON gm.group_id = g.id
+     WHERE g.is_public = 1
+     GROUP BY g.id
+     ORDER BY g.name`
+  );
+  res.json(rows.map(g => ({
+    id: g.id,
+    name: g.name,
+    memberCount: Number(g.member_count ?? 0),
+  })));
+});
+
 router.get('/public', authRequired, async (_req, res) => {
   const groups = await all('SELECT id, name, invite_code FROM groups WHERE is_public = 1 ORDER BY name');
   res.json(groups);
 });
 
 router.post('/join', authRequired, async (req, res) => {
-  const { inviteCode } = req.body;
-  const group = await get('SELECT * FROM groups WHERE invite_code = ?', [inviteCode?.toUpperCase()]);
-  if (!group) return res.status(404).json({ error: 'Code invalide' });
+  const { inviteCode, groupId } = req.body;
+  let group;
+
+  if (groupId) {
+    group = await get('SELECT * FROM groups WHERE id = ? AND is_public = 1', [Number(groupId)]);
+    if (!group) return res.status(404).json({ error: 'Groupe introuvable' });
+  } else if (inviteCode?.trim()) {
+    group = await get('SELECT * FROM groups WHERE invite_code = ?', [inviteCode.trim().toUpperCase()]);
+    if (!group) return res.status(404).json({ error: 'Code invalide' });
+  } else {
+    return res.status(400).json({ error: 'Choisis un groupe ou entre un code' });
+  }
 
   const existing = await get('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?', [group.id, req.user.id]);
   if (!existing) {

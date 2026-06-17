@@ -63,25 +63,68 @@ function goToMatches() {
   renderApp();
 }
 
-function renderAuth() {
+function setAuthPage(on) {
+  document.body.classList.toggle('auth-page', on);
+}
+
+function formatMemberCount(n) {
+  const count = Number(n) || 0;
+  return `${count} membre${count > 1 ? 's' : ''}`;
+}
+
+function renderPublicGroupOptions(publicGroups) {
+  if (!publicGroups.length) {
+    return `<div class="auth-empty-groups">Aucun groupe public pour l'instant</div>`;
+  }
+  return `<select id="public-group" class="auth-select">
+    ${publicGroups.map(g => `<option value="${g.id}">${g.name} (${formatMemberCount(g.memberCount)})</option>`).join('')}
+  </select>`;
+}
+
+async function renderAuth() {
+  setAuthPage(true);
+
+  let publicGroups = [];
+  try {
+    publicGroups = await groups.publicList();
+  } catch {
+    /* liste vide si API indisponible */
+  }
+
+  const authUi = {
+    mode: 'login',
+    joinMode: 'pick',
+  };
+
   app.innerHTML = `
     <div class="auth-screen">
-      <div class="auth-card">
-        <div class="auth-logo">⚽</div>
-        <div class="auth-title">Matchday</div>
-        <div class="auth-sub">Pronostics entre amis</div>
-        <form id="auth-form" novalidate>
-          <div class="form-group">
-            <label for="username">Pseudo</label>
-            <input id="username" name="username" autocomplete="username" required>
+      <div class="auth-wrap">
+        <div class="auth-hero">🏆</div>
+        <h1 class="auth-title">Matchday</h1>
+        <p class="auth-sub">Connecte-toi pour jouer</p>
+
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" data-mode="login">Connexion</button>
+          <button type="button" class="auth-tab" data-mode="register">Inscription</button>
+        </div>
+
+        <form id="auth-form" class="auth-form" novalidate>
+          <input id="username" class="auth-input" name="username" autocomplete="username" placeholder="Pseudo" required>
+          <input id="password" class="auth-input" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+
+          <div id="join-section" class="auth-join-block hidden">
+            <div class="auth-section-label">Rejoindre un groupe</div>
+            <div class="auth-subtabs">
+              <button type="button" class="auth-subtab active" data-join="pick">Choisir un groupe</button>
+              <button type="button" class="auth-subtab" data-join="code">Code d'accès</button>
+            </div>
+            <div id="join-pick">${renderPublicGroupOptions(publicGroups)}</div>
+            <div id="join-code" class="hidden">
+              <input id="invite-code" class="auth-input" placeholder="EX. CDM7X2K" autocomplete="off" style="text-transform:uppercase">
+            </div>
           </div>
-          <div class="form-group">
-            <label for="password">Mot de passe</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" required>
-            <div class="form-hint" id="password-hint">6 caractères minimum pour créer un compte</div>
-          </div>
-          <button type="submit" class="btn btn-primary" id="login-btn">Se connecter</button>
-          <button type="button" class="btn btn-secondary" id="register-btn">Créer un compte</button>
+
+          <button type="submit" class="auth-submit" id="auth-submit">Se connecter</button>
           <div class="error-msg hidden" id="auth-error"></div>
         </form>
       </div>
@@ -90,28 +133,58 @@ function renderAuth() {
   const form = document.getElementById('auth-form');
   const errEl = document.getElementById('auth-error');
   const passwordEl = document.getElementById('password');
+  const joinSection = document.getElementById('join-section');
+  const joinPick = document.getElementById('join-pick');
+  const joinCode = document.getElementById('join-code');
+  const submitBtn = document.getElementById('auth-submit');
 
   const clearError = () => {
     errEl.textContent = '';
     errEl.classList.add('hidden');
   };
 
+  const syncAuthUi = () => {
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.mode === authUi.mode);
+    });
+    document.querySelectorAll('.auth-subtab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.join === authUi.joinMode);
+    });
+
+    const isRegister = authUi.mode === 'register';
+    joinSection.classList.toggle('hidden', !isRegister);
+    joinPick.classList.toggle('hidden', !isRegister || authUi.joinMode !== 'pick');
+    joinCode.classList.toggle('hidden', !isRegister || authUi.joinMode !== 'code');
+    submitBtn.textContent = isRegister ? "S'inscrire" : 'Se connecter';
+    passwordEl.autocomplete = isRegister ? 'new-password' : 'current-password';
+  };
+
+  document.querySelectorAll('.auth-tab').forEach(tab => {
+    tab.onclick = () => {
+      authUi.mode = tab.dataset.mode;
+      clearError();
+      syncAuthUi();
+    };
+  });
+
+  document.querySelectorAll('.auth-subtab').forEach(tab => {
+    tab.onclick = () => {
+      authUi.joinMode = tab.dataset.join;
+      clearError();
+      syncAuthUi();
+    };
+  });
+
   form.querySelector('#username').addEventListener('input', clearError);
   passwordEl.addEventListener('input', clearError);
+  document.getElementById('invite-code')?.addEventListener('input', clearError);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    doAuth('login');
+    doAuth(authUi);
   });
 
-  document.getElementById('register-btn').onclick = () => {
-    passwordEl.autocomplete = 'new-password';
-    doAuth('register');
-  };
-
-  document.getElementById('login-btn').addEventListener('click', () => {
-    passwordEl.autocomplete = 'current-password';
-  });
+  syncAuthUi();
 }
 
 function validateAuthInput(mode, username, password) {
@@ -123,12 +196,12 @@ function validateAuthInput(mode, username, password) {
   return null;
 }
 
-async function doAuth(mode) {
+async function doAuth(authUi) {
+  const mode = authUi.mode;
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
   const errEl = document.getElementById('auth-error');
-  const loginBtn = document.getElementById('login-btn');
-  const registerBtn = document.getElementById('register-btn');
+  const submitBtn = document.getElementById('auth-submit');
 
   const validationError = validateAuthInput(mode, username, password);
   if (validationError) {
@@ -137,8 +210,7 @@ async function doAuth(mode) {
     return;
   }
 
-  loginBtn.disabled = true;
-  registerBtn.disabled = true;
+  submitBtn.disabled = true;
   errEl.classList.add('hidden');
 
   try {
@@ -147,17 +219,29 @@ async function doAuth(mode) {
       : await auth.register({ username, password, displayName: username });
     auth.setToken(data.token);
     state.user = data.user;
+
+    if (mode === 'register') {
+      if (authUi.joinMode === 'pick') {
+        const groupId = document.getElementById('public-group')?.value;
+        if (groupId) await groups.join({ groupId: Number(groupId) });
+      } else {
+        const code = document.getElementById('invite-code')?.value.trim();
+        if (code) await groups.join({ inviteCode: code });
+      }
+    }
+
+    setAuthPage(false);
     await init();
   } catch (e) {
     errEl.textContent = e.message || 'Une erreur est survenue';
     errEl.classList.remove('hidden');
   } finally {
-    loginBtn.disabled = false;
-    registerBtn.disabled = false;
+    submitBtn.disabled = false;
   }
 }
 
 function renderOnboarding() {
+  setAuthPage(false);
   app.innerHTML = `<div class="app-shell"><div class="section-card">
     <div class="section-head"><div class="jn">Bienvenue sur Matchday !</div></div>
     <p style="color:var(--ink-soft);font-size:14px;margin-bottom:16px">Crée un groupe ou rejoins-en un avec un code.</p>
@@ -178,6 +262,10 @@ async function renderCreateGroup() {
     <div class="comp-check" id="comp-checks">
       ${allComps.map(c => `<label><input type="checkbox" value="${c.id}"><span>${c.emoji} ${c.nom}</span></label>`).join('')}
     </div>
+    <label class="comp-check" style="margin-top:12px">
+      <input type="checkbox" id="group-public" checked>
+      <span>Groupe public (visible à l'inscription)</span>
+    </label>
     <button class="btn btn-primary" id="submit-group">Créer</button>
     <div class="error-msg hidden" id="group-error"></div>
   </div></div>`;
@@ -191,7 +279,11 @@ async function renderCreateGroup() {
       return;
     }
     try {
-      const g = await groups.create({ name, competitionIds });
+      const g = await groups.create({
+        name,
+        competitionIds,
+        isPublic: document.getElementById('group-public').checked,
+      });
       state.myGroups = await groups.list();
       await loadGroup(g.id);
       renderApp();
@@ -202,17 +294,54 @@ async function renderCreateGroup() {
   };
 }
 
-function renderJoinGroup() {
+async function renderJoinGroup() {
+  setAuthPage(false);
+  let publicGroups = [];
+  try {
+    publicGroups = await groups.publicList();
+  } catch { /* ignore */ }
+
+  const joinUi = { mode: publicGroups.length ? 'pick' : 'code' };
+
   app.innerHTML = `<div class="app-shell"><div class="section-card">
     <div class="section-head"><div class="jn">Rejoindre un groupe</div></div>
-    <div class="form-group"><label>Code d'invitation</label><input id="invite-code" style="text-transform:uppercase"></div>
+    ${publicGroups.length ? `
+      <div class="auth-subtabs" style="margin-bottom:12px">
+        <button type="button" class="auth-subtab ${joinUi.mode === 'pick' ? 'active' : ''}" data-join="pick">Choisir un groupe</button>
+        <button type="button" class="auth-subtab ${joinUi.mode === 'code' ? 'active' : ''}" data-join="code">Code d'accès</button>
+      </div>
+      <div id="join-pick" class="${joinUi.mode === 'pick' ? '' : 'hidden'}">
+        ${renderPublicGroupOptions(publicGroups)}
+      </div>
+    ` : ''}
+    <div id="join-code" class="${joinUi.mode === 'code' ? '' : 'hidden'}">
+      <div class="form-group"><label>Code d'invitation</label><input id="invite-code" style="text-transform:uppercase"></div>
+    </div>
     <button class="btn btn-primary" id="join-submit">Rejoindre</button>
     <div class="error-msg hidden" id="join-error"></div>
   </div></div>`;
 
+  document.querySelectorAll('[data-join]').forEach(btn => {
+    btn.onclick = () => {
+      joinUi.mode = btn.dataset.join;
+      document.querySelectorAll('[data-join]').forEach(b => b.classList.toggle('active', b.dataset.join === joinUi.mode));
+      document.getElementById('join-pick')?.classList.toggle('hidden', joinUi.mode !== 'pick');
+      document.getElementById('join-code')?.classList.toggle('hidden', joinUi.mode !== 'code');
+    };
+  });
+
   document.getElementById('join-submit').onclick = async () => {
     try {
-      const g = await groups.join(document.getElementById('invite-code').value.trim());
+      let g;
+      if (joinUi.mode === 'pick') {
+        const groupId = document.getElementById('public-group')?.value;
+        if (!groupId) throw new Error('Choisis un groupe');
+        g = await groups.join({ groupId: Number(groupId) });
+      } else {
+        const code = document.getElementById('invite-code').value.trim();
+        if (!code) throw new Error('Entre un code d\'accès');
+        g = await groups.join({ inviteCode: code });
+      }
       state.myGroups = await groups.list();
       await loadGroup(g.id);
       renderApp();
@@ -379,6 +508,7 @@ function navHtml() {
 }
 
 async function renderApp() {
+  setAuthPage(false);
   app.innerHTML = `<div class="app-shell">
     ${headerHtml()}
     ${state.screen === 'matches' || state.screen === 'standings' || state.screen === 'championships' ? compPillsHtml() : ''}

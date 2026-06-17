@@ -20,6 +20,13 @@ export async function api(path, options = {}) {
   return data;
 }
 
+export async function apiPublic(path) {
+  const res = await fetch(`${API}${path}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+  return data;
+}
+
 export const auth = {
   register: (body) => api('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body) => api('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
@@ -34,8 +41,12 @@ export const auth = {
 export const groups = {
   list: () => api('/groups/mine'),
   public: () => api('/groups/public'),
+  publicList: () => apiPublic('/groups/public/list'),
   create: (body) => api('/groups', { method: 'POST', body: JSON.stringify(body) }),
-  join: (inviteCode) => api('/groups/join', { method: 'POST', body: JSON.stringify({ inviteCode }) }),
+  join: (payload) => {
+    const body = typeof payload === 'string' ? { inviteCode: payload } : payload;
+    return api('/groups/join', { method: 'POST', body: JSON.stringify(body) });
+  },
   get: (id) => api(`/groups/${id}`),
   competitions: () => api('/groups/competitions'),
   updateCompetitions: (id, competitionIds) =>
