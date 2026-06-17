@@ -40,9 +40,10 @@ export async function init() {
     });
     startMatchReminders(state, goToMatches);
     renderApp();
-  } catch {
+  } catch (err) {
     auth.logout();
     renderAuth();
+    throw err;
   }
 }
 
@@ -69,34 +70,90 @@ function renderAuth() {
         <div class="auth-logo">⚽</div>
         <div class="auth-title">Matchday</div>
         <div class="auth-sub">Pronostics entre amis</div>
-        <div id="auth-form">
-          <div class="form-group"><label>Pseudo</label><input id="username" autocomplete="username"></div>
-          <div class="form-group"><label>Mot de passe</label><input id="password" type="password" autocomplete="current-password"></div>
-          <button class="btn btn-primary" id="login-btn">Se connecter</button>
-          <button class="btn btn-secondary" id="register-btn">Créer un compte</button>
+        <form id="auth-form" novalidate>
+          <div class="form-group">
+            <label for="username">Pseudo</label>
+            <input id="username" name="username" autocomplete="username" required>
+          </div>
+          <div class="form-group">
+            <label for="password">Mot de passe</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+            <div class="form-hint" id="password-hint">6 caractères minimum pour créer un compte</div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="login-btn">Se connecter</button>
+          <button type="button" class="btn btn-secondary" id="register-btn">Créer un compte</button>
           <div class="error-msg hidden" id="auth-error"></div>
-        </div>
+        </form>
       </div>
     </div>`;
 
-  document.getElementById('login-btn').onclick = () => doAuth('login');
-  document.getElementById('register-btn').onclick = () => doAuth('register');
+  const form = document.getElementById('auth-form');
+  const errEl = document.getElementById('auth-error');
+  const passwordEl = document.getElementById('password');
+
+  const clearError = () => {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  };
+
+  form.querySelector('#username').addEventListener('input', clearError);
+  passwordEl.addEventListener('input', clearError);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    doAuth('login');
+  });
+
+  document.getElementById('register-btn').onclick = () => {
+    passwordEl.autocomplete = 'new-password';
+    doAuth('register');
+  };
+
+  document.getElementById('login-btn').addEventListener('click', () => {
+    passwordEl.autocomplete = 'current-password';
+  });
+}
+
+function validateAuthInput(mode, username, password) {
+  if (!username) return 'Choisis un pseudo';
+  if (!password) return 'Entre un mot de passe';
+  if (mode === 'register' && password.length < 6) {
+    return 'Mot de passe trop court — 6 caractères minimum';
+  }
+  return null;
 }
 
 async function doAuth(mode) {
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
   const errEl = document.getElementById('auth-error');
+  const loginBtn = document.getElementById('login-btn');
+  const registerBtn = document.getElementById('register-btn');
+
+  const validationError = validateAuthInput(mode, username, password);
+  if (validationError) {
+    errEl.textContent = validationError;
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  loginBtn.disabled = true;
+  registerBtn.disabled = true;
+  errEl.classList.add('hidden');
+
   try {
     const data = mode === 'login'
       ? await auth.login({ username, password })
       : await auth.register({ username, password, displayName: username });
     auth.setToken(data.token);
     state.user = data.user;
-    init();
+    await init();
   } catch (e) {
-    errEl.textContent = e.message;
+    errEl.textContent = e.message || 'Une erreur est survenue';
     errEl.classList.remove('hidden');
+  } finally {
+    loginBtn.disabled = false;
+    registerBtn.disabled = false;
   }
 }
 

@@ -8,8 +8,14 @@ const router = Router();
 router.post('/register', async (req, res) => {
   try {
     const { username, password, displayName } = req.body;
-    if (!username || !password || password.length < 6) {
-      return res.status(400).json({ error: 'Pseudo et mot de passe (6+ car.) requis' });
+    if (!username?.trim()) {
+      return res.status(400).json({ error: 'Choisis un pseudo' });
+    }
+    if (!password) {
+      return res.status(400).json({ error: 'Entre un mot de passe' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Mot de passe trop court — 6 caractères minimum' });
     }
 
     const existing = await get('SELECT id FROM users WHERE username = ?', [username.toLowerCase()]);

@@ -75,6 +75,9 @@ body {
   background: var(--card-soft);
 }
 .form-group input:focus { outline: none; border-color: var(--pl); }
+.form-hint { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+.form-group input:invalid:not(:placeholder-shown) { border-color: var(--liga); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
 .btn {
   width: 100%; padding: 13px; border: none; border-radius: 999px;
   font-family: 'Baloo 2', sans-serif; font-size: 15px; font-weight: 700;
