@@ -2,10 +2,25 @@ import { all } from '../db/connection.js';
 import * as bsd from './bsd.js';
 
 const teamMapCache = new Map();
+const CACHE_MS = 3600000;
+
+async function loadShortNames(leagueId) {
+  const shortNames = new Map();
+  try {
+    const data = await bsd.getTeams({ league_id: leagueId, limit: 200 });
+    for (const t of bsd.extractResults(data)) {
+      shortNames.set(t.id, t.short_name ?? (t.name || '').split(' ').pop());
+    }
+  } catch {
+    /* optionnel */
+  }
+  return shortNames;
+}
 
 export async function getGroupTeamMap(groupId) {
-  const cached = teamMapCache.get(groupId);
-  if (cached && Date.now() - cached.at < 3600000) return cached.map;
+  const cacheKey = `${groupId}:v2`;
+  const cached = teamMapCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.map;
 
   const comps = await all(
     `SELECT c.id, c.code, c.bsd_league_id, c.nom FROM competitions c
@@ -17,22 +32,20 @@ export async function getGroupTeamMap(groupId) {
   const map = new Map();
   for (const c of comps) {
     try {
-      const allowedTeams = await bsd.getStandingTeamNames(c.bsd_league_id);
-      const data = await bsd.getTeams({ league_id: c.bsd_league_id, limit: 200 });
-      for (const t of bsd.extractResults(data)) {
-        const names = [t.name, t.short_name].filter(Boolean);
-        const inStandings = !allowedTeams?.size
-          || names.some(n => allowedTeams.has(bsd.normalizeTeamName(n)));
-        if (!inStandings) continue;
+      const standingTeams = await bsd.getStandingTeams(c.bsd_league_id);
+      if (!standingTeams?.length) continue;
 
-        map.set(t.id, {
-          team_id: t.id,
-          team_name: t.name ?? t.short_name,
-          short_name: t.short_name ?? (t.name || '').split(' ').pop(),
+      const shortNames = await loadShortNames(c.bsd_league_id);
+
+      for (const t of standingTeams) {
+        map.set(t.team_id, {
+          team_id: t.team_id,
+          team_name: t.team_name,
+          short_name: shortNames.get(t.team_id) ?? t.team_name.split(' ').pop(),
           competition_id: c.id,
           comp_code: c.code,
           comp_nom: c.nom,
-          logo_url: `https://sports.bzzoiro.com/img/team/${t.id}/?bg=transparent`,
+          logo_url: `https://sports.bzzoiro.com/img/team/${t.team_id}/?bg=transparent`,
         });
       }
     } catch {
@@ -40,7 +53,7 @@ export async function getGroupTeamMap(groupId) {
     }
   }
 
-  teamMapCache.set(groupId, { at: Date.now(), map });
+  teamMapCache.set(cacheKey, { at: Date.now(), map });
   return map;
 }
 

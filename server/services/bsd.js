@@ -120,19 +120,26 @@ export function normalizeTeamName(name) {
 }
 
 /** Équipes du classement officiel BSD (source de vérité pour filtrer les matchs parasites). */
-export async function getStandingTeamNames(leagueId) {
+export async function getStandingTeams(leagueId) {
   try {
     const data = await getStandings(leagueId);
     const rows = data.standings ?? extractResults(data);
-    const names = new Set();
-    for (const row of rows) {
-      const n = row.team?.name ?? row.team_name ?? row.name;
-      if (n) names.add(normalizeTeamName(n));
-    }
-    return names.size >= 8 ? names : null;
+    if (rows.length < 8) return null;
+    return rows
+      .map(row => ({
+        team_id: row.team_id ?? row.team?.id,
+        team_name: row.team_name ?? row.team?.name ?? row.name,
+      }))
+      .filter(t => t.team_id && t.team_name);
   } catch {
     return null;
   }
+}
+
+export async function getStandingTeamNames(leagueId) {
+  const teams = await getStandingTeams(leagueId);
+  if (!teams?.length) return null;
+  return new Set(teams.map(t => normalizeTeamName(t.team_name)));
 }
 
 export function eventTeamsInStandings(event, allowedTeams) {
