@@ -29,6 +29,17 @@ router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, r
                    SELECT 1 FROM predictions p
                    WHERE p.match_id = m.id AND p.group_id = ? AND p.user_id = ?
                  )
+                 OR (
+                   NOT EXISTS (
+                     SELECT 1 FROM matches u
+                     WHERE u.competition_id = m.competition_id
+                       AND (
+                         (u.kickoff_at >= datetime('now') AND u.status NOT IN ('finished', 'FT', 'ended'))
+                         OR u.status IN ('live', 'inprogress')
+                       )
+                   )
+                   AND m.season = c.saison_active
+                 )
                )`;
   const params = [...compIds, req.groupId, req.user.id];
 
@@ -47,11 +58,21 @@ router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, r
   );
   const predMap = Object.fromEntries(predictions.map(p => [p.match_id, p]));
 
-  res.json(matches.map(m => ({
-    ...m,
-    prediction: predMap[m.id] ?? null,
-    isLocked: new Date(m.kickoff_at) <= new Date() || ['live', 'finished', 'FT'].includes(m.status),
-  })));
+  const openCompIds = new Set(
+    matches
+      .filter(m => new Date(m.kickoff_at) > new Date() && !['finished', 'FT', 'ended'].includes(m.status))
+      .map(m => m.competition_id)
+  );
+
+  res.json(matches.map(m => {
+    const isLocked = new Date(m.kickoff_at) <= new Date() || ['live', 'finished', 'FT'].includes(m.status);
+    return {
+      ...m,
+      prediction: predMap[m.id] ?? null,
+      isLocked,
+      calendarClosed: !openCompIds.has(m.competition_id),
+    };
+  }));
 });
 
 router.get('/:groupId/matches/:matchId', authRequired, groupMemberRequired, async (req, res) => {

@@ -60,6 +60,7 @@ async function pickCompetitionWithMatches(groupId, competitions) {
       open.sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at));
       return open[0].competition_id;
     }
+    if (list.length) return list[0].competition_id;
   } catch { /* ignore */ }
   return competitions[0]?.id ?? null;
 }
@@ -759,12 +760,19 @@ async function renderMatches(el) {
     ]);
 
     if (!matchList.length) {
-      const comp = state.competitions.find(c => c.id === state.activeComp);
-      const compLabel = comp?.nom ?? 'ce championnat';
-      const others = state.competitions.filter(c => c.id !== state.activeComp).map(c => c.nom).join(', ');
-      el.innerHTML = `<div class="section-card"><div class="empty-state">Aucun match à pronostiquer pour <strong>${compLabel}</strong> pour l'instant.${others ? `<br>Essaie un autre championnat ci-dessus (${others}).` : ''}<br><small style="opacity:0.75">Sur BSD, seuls certains calendriers 2026-2027 sont déjà publiés (ex. Premier League).</small></div></div>`;
+      el.innerHTML = `<div class="section-card"><div class="empty-state">Aucun calendrier disponible pour ce championnat.<br>La sync BSD se fait toutes les 6h.</div></div>`;
       return;
     }
+
+    const comp = state.competitions.find(c => c.id === state.activeComp) ?? matchList[0];
+    const season = matchList[0].season ?? comp.saisonActive ?? comp.saison_active ?? '2025-2026';
+    const calendarClosed = matchList.every(m => m.calendarClosed ?? m.isLocked);
+    const closedBanner = calendarClosed
+      ? `<div class="calendar-closed-banner">
+          <strong>Saison ${season} — calendrier fermé</strong>
+          <span>Le calendrier 2026-2027 n'est pas encore disponible sur BSD. Tu peux consulter la saison passée ci-dessous, mais les pronostics sont terminés.</span>
+        </div>`
+      : '';
 
     const byMatchday = {};
     for (const m of matchList) {
@@ -784,7 +792,7 @@ async function renderMatches(el) {
       return String(mdA).localeCompare(String(mdB), 'fr');
     });
 
-    el.innerHTML = sortedMatchdays.map(([key, ms]) => {
+    el.innerHTML = `${closedBanner}${sortedMatchdays.map(([key, ms]) => {
       const [season, md] = key.split('|');
       const comp = state.competitions.find(c => c.id === ms[0].competition_id) ?? ms[0];
       const cc = compColors(comp.code ?? comp.comp_code);
@@ -796,11 +804,11 @@ async function renderMatches(el) {
       return `<div class="section-card matchday-section ${allLocked ? 'matchday-past' : 'matchday-open'}" data-matchday="${md}" data-season="${season}">
         <div class="section-head">
           <div class="jn"><div class="comp-flag" style="background:${cc.bg};color:${cc.color}">${comp.code ?? comp.comp_code}</div>Journée ${md}<span class="season-tag">${season}</span></div>
-          ${cd ? `<div class="countdown-bubble">${cd}</div>` : allLocked ? '<div class="countdown-bubble locked">Terminée</div>' : ''}
+          ${cd ? `<div class="countdown-bubble">${cd}</div>` : allLocked ? `<div class="countdown-bubble locked">${calendarClosed ? 'Fermée' : 'Terminée'}</div>` : ''}
         </div>
         ${ms.map(m => matchCardHtml(m, cc, logoMap)).join('')}
       </div>`;
-    }).join('');
+    }).join('')}`;
 
     el.querySelectorAll('.score-pill input').forEach(input => {
       input.addEventListener('change', onScoreChange);
@@ -823,7 +831,10 @@ function matchCardHtml(m, cc, logoMap) {
 
   let bottom = 'à toi de jouer';
   let bottomClass = 'open';
-  if (m.isLocked && pred?.points != null) {
+  if (m.calendarClosed || (m.isLocked && !pred)) {
+    bottom = m.calendarClosed ? 'saison fermée' : 'verrouillé';
+    bottomClass = 'locked-closed';
+  } else if (m.isLocked && pred?.points != null) {
     const labels = { exact: '🎯 +3 pts — score exact !', diff: '👏 +2 pts — bon écart', winner: '💪 +1 pt — bon vainqueur', miss: '😅 raté' };
     bottom = labels[pred.points_detail] ?? `${pred.points} pts`;
     bottomClass = pred.points > 0 ? 'points' : '';

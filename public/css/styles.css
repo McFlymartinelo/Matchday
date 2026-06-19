@@ -501,6 +501,15 @@ body.auth-page {
   font-size: 11px; font-weight: 700; color: var(--bundesliga); background: var(--bundesliga-bg);
   padding: 4px 10px; border-radius: 999px;
 }
+.countdown-bubble.locked { color: var(--ink-soft); background: var(--card-soft); }
+
+.calendar-closed-banner {
+  margin-bottom: 12px; padding: 14px 16px; border-radius: 16px;
+  background: var(--card-soft); border: 1px solid var(--border-soft);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.calendar-closed-banner strong { font-size: 14px; color: var(--ink); }
+.calendar-closed-banner span { font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
 
 /* Match cards */
 .match-card { background: var(--card-soft); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
@@ -527,6 +536,8 @@ body.auth-page {
 .match-bottom { text-align: center; margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--ink-soft); }
 .match-bottom.points { color: var(--l1); }
 .match-bottom.open { color: var(--serie); }
+.match-bottom.locked-closed { color: var(--ink-soft); opacity: 0.85; }
+.matchday-section.matchday-past { opacity: 0.92; }
 
 /* Standings */
 .standings-card .row {
