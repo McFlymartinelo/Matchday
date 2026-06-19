@@ -51,8 +51,10 @@ const FORMATIONS = {
   },
 };
 
-const POS_LABELS = { GK: 'Gardien', DEF: 'Déf.', MID: 'Mil.', FWD: 'Att.' };
+const POS_LABELS = { GK: 'Gardien', DEF: 'Défenseur', MID: 'Milieu', FWD: 'Attaquant' };
 const POS_SHORT = { GK: 'GK', DEF: 'DEF', MID: 'MIL', FWD: 'ATT' };
+
+const XI_INTRO = `Compose ton équipe idéale pour toute la saison. À chaque journée, si tes joueurs figurent dans le <strong>11 type</strong> de leur championnat, tu gagnes <strong>+1 pt par joueur</strong>. Choisis ta tactique, clique sur un poste, puis sélectionne un joueur (max <strong>1 par club</strong>).`;
 
 function posLabel(role) {
   return POS_LABELS[role] ?? role;
@@ -231,6 +233,7 @@ export async function renderSeasonXi(el, state) {
           <div class="jn">Mon 11 de saison</div>
           <div class="countdown-bubble">${data.isLocked ? '🔒 Verrouillé' : '✏️ Modifiable'}</div>
         </div>
+        <p class="xi-intro">${XI_INTRO}</p>
         ${editable ? `
         <div class="xi-formation-tabs">
           ${Object.entries(FORMATIONS).map(([key, f]) =>
@@ -241,7 +244,7 @@ export async function renderSeasonXi(el, state) {
         <div class="pitch"><div class="pitch-line pitch-line-marked">
           ${renderPitch(draft, formation, editable, activeSlot)}
         </div></div>
-        ${activeSlotLabel && editable ? `<div class="xi-active-slot">Poste sélectionné : <strong>${posLabel(activeSlotLabel.role)}</strong> — choisis un joueur ci-dessous</div>` : ''}
+        ${activeSlotLabel && editable ? `<div class="xi-active-slot">Poste sélectionné : <strong>${posLabel(activeSlotLabel.role)}</strong></div>` : ''}
         <div class="xi-bonus">Bonus total : +${data.bonusTotal ?? 0} pts</div>
       </div>
 
@@ -251,10 +254,14 @@ export async function renderSeasonXi(el, state) {
       </div>
 
       ${editable ? `
-      <div class="section-card">
-        <div class="section-head"><div class="jn">Ajouter un joueur</div></div>
-        <p class="profile-desc">1. Choisis une tactique · 2. Clique sur un poste · 3. Recherche le joueur (max <strong>1 par club</strong>)</p>
-        <input id="xi-search" class="xi-search-input" placeholder="Rechercher un joueur (ex. Mbappé, Saliba…)" ${!activeSlot ? 'disabled' : ''}>
+      <div class="section-card xi-picker-section" id="xi-picker-section">
+        <div class="section-head">
+          <div class="jn">${activeSlotLabel ? `Choisir un ${posLabel(activeSlotLabel.role)}` : 'Ajouter un joueur'}</div>
+        </div>
+        <p class="profile-desc">${activeSlotLabel
+          ? `Recherche ci-dessous le joueur pour le poste de <strong>${posLabel(activeSlotLabel.role)}</strong>.`
+          : 'Clique sur un poste vide du terrain pour ouvrir la liste des joueurs.'}</p>
+        <input id="xi-search" class="xi-search-input" placeholder="${activeSlotLabel ? `Rechercher un ${posLabel(activeSlotLabel.role).toLowerCase()}…` : 'Sélectionne d\'abord un poste sur le terrain'}" ${!activeSlot ? 'disabled' : ''}>
         <div id="xi-results" class="xi-results">${renderSearchResults([], draft, activeSlot, formation)}</div>
       </div>` : ''}
     `;
@@ -333,12 +340,24 @@ export async function renderSeasonXi(el, state) {
     saveDraft();
   }
 
+  function scrollToPlayerPicker() {
+    requestAnimationFrame(() => {
+      const section = document.getElementById('xi-picker-section');
+      section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => {
+        const search = document.getElementById('xi-search');
+        search?.focus({ preventScroll: true });
+      }, 400);
+    });
+  }
+
   function bindEvents() {
     document.querySelectorAll('.pitch-slot.empty').forEach(btn => {
       btn.onclick = () => {
         activeSlot = btn.dataset.slot;
         paint();
         loadBrowse(document.getElementById('xi-search')?.value ?? '');
+        scrollToPlayerPicker();
       };
     });
 
