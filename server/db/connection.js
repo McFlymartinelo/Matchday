@@ -83,6 +83,7 @@ async function ensureMatchColumns() {
   await addColumnIfMissing('matches', 'away_bsd_team_id', 'INTEGER');
   await addColumnIfMissing('season_xi', 'formation', "TEXT DEFAULT '433'");
   await addColumnIfMissing('season_xi_players', 'slot_id', 'TEXT');
+  await addColumnIfMissing('season_xi_players', 'natural_position', 'TEXT');
 }
 
 async function addColumnIfMissing(table, column, type) {

@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS season_xi_players (
   competition_id INTEGER NOT NULL REFERENCES competitions(id),
   position TEXT NOT NULL,
   slot_id TEXT,
+  natural_position TEXT,
   UNIQUE(season_xi_id, player_id),
   UNIQUE(season_xi_id, team_id)
 );

@@ -832,6 +832,8 @@ html[data-theme="dark"] .theme-option.active {
 .player-slot .pos { font-size: 9px; color: var(--ink-soft); }
 .player-slot.removable { cursor: pointer; border: none; font-family: inherit; }
 .player-slot.removable:hover { filter: brightness(0.95); transform: translate(-50%, -50%) scale(1.04); }
+.player-slot.out-of-position { box-shadow: 0 0 0 2px rgba(201, 112, 31, 0.45); }
+.player-slot-warn { position: absolute; top: -6px; right: -6px; font-size: 11px; line-height: 1; }
 .player-slot-name { font-size: 10px; font-weight: 800; color: var(--ink); }
 .pitch-empty { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; }
 
@@ -858,6 +860,9 @@ html[data-theme="dark"] .theme-option.active {
 }
 .xi-player-option:hover:not(.disabled):not(.in-xi) { border-color: var(--pl); background: var(--pl-bg); }
 .xi-player-option.in-xi { opacity: 0.6; cursor: default; }
+.xi-player-option.wrong-pos { border-color: #F5D4A8; background: #FDF6EC; }
+.xi-player-option.wrong-pos:hover:not(.disabled):not(.in-xi) { border-color: #C9701F; background: #FDF1E2; }
+.xi-draft-row.out-of-position { border-left: 3px solid #C9701F; padding-left: 10px; }
 .xi-player-option.disabled { opacity: 0.5; cursor: not-allowed; }
 .xi-opt-pos {
   font-size: 10px; font-weight: 800; padding: 4px 7px; border-radius: 8px; flex-shrink: 0;

@@ -66,6 +66,7 @@ router.put('/:groupId/season-xi', authRequired, groupMemberRequired, async (req,
     ...p,
     position: bsd.normalizeXiPosition(p.position),
     slot_id: p.slot_id ?? p.slotId ?? null,
+    natural_position: p.natural_position ?? p.naturalPosition ?? p.position,
   }));
 
   const validation = validateSeasonXiPlayers(normalized);
@@ -103,9 +104,9 @@ router.put('/:groupId/season-xi', authRequired, groupMemberRequired, async (req,
   await run('DELETE FROM season_xi_players WHERE season_xi_id = ?', [xi.id]);
   for (const p of normalized) {
     await run(
-      `INSERT INTO season_xi_players (season_xi_id, player_id, player_name, team_id, team_name, competition_id, position, slot_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [xi.id, p.player_id, p.player_name, p.team_id, p.team_name, p.competition_id, p.position, p.slot_id]
+      `INSERT INTO season_xi_players (season_xi_id, player_id, player_name, team_id, team_name, competition_id, position, slot_id, natural_position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [xi.id, p.player_id, p.player_name, p.team_id, p.team_name, p.competition_id, p.position, p.slot_id, p.natural_position]
     );
   }
 

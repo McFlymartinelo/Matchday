@@ -54,7 +54,17 @@ const FORMATIONS = {
 const POS_LABELS = { GK: 'Gardien', DEF: 'Défenseur', MID: 'Milieu', FWD: 'Attaquant' };
 const POS_SHORT = { GK: 'GK', DEF: 'DEF', MID: 'MIL', FWD: 'ATT' };
 
-const XI_INTRO = `Compose ton équipe idéale pour toute la saison. À chaque journée, si tes joueurs figurent dans le <strong>11 type</strong> de leur championnat, tu gagnes <strong>+1 pt par joueur</strong>. Choisis ta tactique, clique sur un poste, puis sélectionne un joueur (max <strong>1 par club</strong>).`;
+const XI_INTRO = `Compose ton équipe idéale pour toute la saison. À chaque journée, si tes joueurs figurent dans le <strong>11 type</strong> de leur championnat, tu gagnes <strong>+1 pt par joueur</strong>. Choisis ta tactique, clique sur un poste, puis sélectionne un joueur (max <strong>1 par club</strong>). Tu peux placer un joueur hors de son poste habituel — un repère <strong>⚠️</strong> l'indiquera.`;
+
+function isOutOfPosition(player, slotRole) {
+  const natural = player.natural_position;
+  if (natural == null || natural === '') return false;
+  return natural !== slotRole;
+}
+
+function slotForPlayer(draft, slotId, formationKey) {
+  return getFormation(formationKey).slots.find(s => s.id === slotId);
+}
 
 function posLabel(role) {
   return POS_LABELS[role] ?? role;
@@ -78,7 +88,15 @@ function assignLegacyPlayers(players, formationKey) {
   }
   for (const slot of slots) {
     const list = byRole[slot.role] ?? [];
-    if (list.length) draft[slot.id] = { ...list.shift(), slot_id: slot.id, position: slot.role };
+    if (list.length) {
+      const p = list.shift();
+      draft[slot.id] = {
+        ...p,
+        slot_id: slot.id,
+        position: slot.role,
+        natural_position: p.natural_position ?? p.position ?? slot.role,
+      };
+    }
   }
   return draft;
 }
@@ -99,11 +117,8 @@ function canAddPlayer(draft, player, slotId, formationKey) {
     const club = Object.values(draft).find(p => p.team_id === player.team_id)?.team_name ?? 'ce club';
     return { ok: false, reason: `Déjà 1 joueur de ${club}` };
   }
-  const playerRole = player.position ?? 'MID';
-  if (playerRole !== slot.role) {
-    return { ok: false, reason: `Ce poste demande un ${posLabel(slot.role)}` };
-  }
-  return { ok: true };
+  const wrongPost = (player.position ?? 'MID') !== slot.role;
+  return { ok: true, wrongPost };
 }
 
 function renderPitch(draft, formationKey, editable, activeSlot) {
@@ -114,10 +129,12 @@ function renderPitch(draft, formationKey, editable, activeSlot) {
     if (p) {
       const comp = p.comp_code ?? 'L1';
       const cc = compColors(comp);
-      return `<button type="button" class="player-slot ${editable ? 'removable' : ''}"
+      const oop = isOutOfPosition(p, slot.role);
+      return `<button type="button" class="player-slot ${editable ? 'removable' : ''} ${oop ? 'out-of-position' : ''}"
         data-remove="${p.player_id}" data-slot="${slot.id}"
-        style="left:${slot.x}%;top:${slot.y}%;border:2px solid ${cc.color};background:${cc.bg}"
-        title="${editable ? 'Retirer' : ''}">
+        style="left:${slot.x}%;top:${slot.y}%;border:2px solid ${oop ? '#C9701F' : cc.color};background:${cc.bg}"
+        title="${editable ? (oop ? `Hors poste (${posLabel(p.natural_position)} en ${posLabel(slot.role)}) — Retirer` : 'Retirer') : ''}">
+        ${oop ? '<span class="player-slot-warn">⚠️</span>' : ''}
         <div class="player-slot-role">${POS_SHORT[slot.role]}</div>
         <div class="player-slot-name">${(p.player_name || '').split(' ').pop()}</div>
         <div class="pos">${p.team_name}</div>
@@ -141,11 +158,13 @@ function renderDraftList(draft, formationKey, editable) {
   list.sort((a, b) => slotOrder.indexOf(a.slot_id) - slotOrder.indexOf(b.slot_id));
   return list.map(p => {
     const cc = compColors(p.comp_code ?? 'L1');
-    return `<div class="xi-draft-row">
+    const slot = slotForPlayer(draft, p.slot_id, formationKey);
+    const oop = slot && isOutOfPosition(p, slot.role);
+    return `<div class="xi-draft-row ${oop ? 'out-of-position' : ''}">
       <span class="xi-draft-pos" style="background:${cc.bg};color:${cc.color}">${POS_SHORT[p.position] ?? p.position}</span>
       <span class="xi-draft-info">
         <strong>${p.player_name}</strong>
-        <span>${p.team_name} · ${p.comp_nom ?? ''}</span>
+        <span>${p.team_name} · ${p.comp_nom ?? ''}${oop ? ` · ⚠️ ${posLabel(p.natural_position)}` : ''}</span>
       </span>
       ${editable ? `<button type="button" class="xi-remove" data-remove="${p.player_id}" aria-label="Retirer">✕</button>` : ''}
     </div>`;
@@ -158,24 +177,28 @@ function renderSearchResults(results, draft, activeSlot, formationKey) {
   }
   const slot = getFormation(formationKey).slots.find(s => s.id === activeSlot);
   if (!results.length) {
-    return `<div class="xi-search-empty">Aucun ${posLabel(slot?.role ?? 'joueur')} trouvé</div>`;
+    return `<div class="xi-search-empty">Aucun joueur trouvé</div>`;
   }
-  const filtered = results.filter(p => (p.position ?? 'MID') === slot?.role);
-  const list = filtered.length ? filtered : results;
-  return list.map(p => {
+  const sorted = [...results].sort((a, b) => {
+    const aMatch = (a.position ?? 'MID') === slot?.role ? 0 : 1;
+    const bMatch = (b.position ?? 'MID') === slot?.role ? 0 : 1;
+    if (aMatch !== bMatch) return aMatch - bMatch;
+    return (a.player_name ?? '').localeCompare(b.player_name ?? '', 'fr');
+  });
+  return sorted.map(p => {
     const check = canAddPlayer(draft, p, activeSlot, formationKey);
     const cc = compColors(p.comp_code ?? 'L1');
     const inXi = Object.values(draft).some(x => x.player_id === p.player_id);
     const wrongRole = slot && (p.position ?? 'MID') !== slot.role;
-    const disabled = !check.ok || wrongRole;
-    return `<button type="button" class="xi-player-option ${inXi ? 'in-xi' : ''} ${disabled && !inXi ? 'disabled' : ''}"
+    const disabled = !check.ok;
+    return `<button type="button" class="xi-player-option ${inXi ? 'in-xi' : ''} ${wrongRole && !inXi ? 'wrong-pos' : ''} ${disabled && !inXi ? 'disabled' : ''}"
       data-player='${JSON.stringify(p).replace(/'/g, '&#39;')}' ${disabled && !inXi ? 'disabled' : ''}>
       <span class="xi-opt-pos" style="background:${cc.bg};color:${cc.color}">${POS_SHORT[p.position] ?? p.position}</span>
       <span class="xi-opt-info">
         <strong>${p.player_name}</strong>
         <span>${p.team_name}${p.comp_nom ? ` · ${p.comp_nom}` : ''}</span>
       </span>
-      ${inXi ? '<span class="xi-opt-badge">✓</span>' : wrongRole ? '<span class="xi-opt-warn">Mauvais poste</span>' : !check.ok ? `<span class="xi-opt-warn">${check.reason.includes('club') ? '⚠️ club' : '—'}</span>` : '<span class="xi-opt-add">+</span>'}
+      ${inXi ? '<span class="xi-opt-badge">✓</span>' : wrongRole ? '<span class="xi-opt-warn">Hors poste</span>' : !check.ok ? `<span class="xi-opt-warn">${check.reason.includes('club') ? '⚠️ club' : '—'}</span>` : '<span class="xi-opt-add">+</span>'}
     </button>`;
   }).join('');
 }
@@ -203,6 +226,7 @@ export async function renderSeasonXi(el, state) {
     competition_id: p.competition_id,
     position: p.position,
     slot_id: p.slot_id,
+    natural_position: p.natural_position ?? p.position,
     comp_code: p.comp_code,
     comp_nom: p.comp_nom,
   }));
@@ -259,9 +283,9 @@ export async function renderSeasonXi(el, state) {
           <div class="jn">${activeSlotLabel ? `Choisir un ${posLabel(activeSlotLabel.role)}` : 'Ajouter un joueur'}</div>
         </div>
         <p class="profile-desc">${activeSlotLabel
-          ? `Recherche ci-dessous le joueur pour le poste de <strong>${posLabel(activeSlotLabel.role)}</strong>.`
+          ? `Recherche ci-dessous — les joueurs <strong>hors poste</strong> sont autorisés (repère ⚠️).`
           : 'Clique sur un poste vide du terrain pour ouvrir la liste des joueurs.'}</p>
-        <input id="xi-search" class="xi-search-input" placeholder="${activeSlotLabel ? `Rechercher un ${posLabel(activeSlotLabel.role).toLowerCase()}…` : 'Sélectionne d\'abord un poste sur le terrain'}" ${!activeSlot ? 'disabled' : ''}>
+        <input id="xi-search" class="xi-search-input" placeholder="${activeSlotLabel ? `Rechercher un joueur…` : 'Sélectionne d\'abord un poste sur le terrain'}" ${!activeSlot ? 'disabled' : ''}>
         <div id="xi-results" class="xi-results">${renderSearchResults([], draft, activeSlot, formation)}</div>
       </div>` : ''}
     `;
@@ -300,6 +324,7 @@ export async function renderSeasonXi(el, state) {
         competition_id: p.competition_id,
         position: p.position,
         slot_id: p.slot_id,
+        natural_position: p.natural_position,
       })), formation);
       showToast('11 enregistré ✓');
     } catch (err) {
@@ -315,9 +340,11 @@ export async function renderSeasonXi(el, state) {
     const check = canAddPlayer(draft, player, activeSlot, formation);
     if (!check.ok) { showToast(check.reason); return; }
     const slot = getFormation(formation).slots.find(s => s.id === activeSlot);
+    const natural = player.position ?? 'MID';
     draft[activeSlot] = {
       ...player,
       position: slot.role,
+      natural_position: natural,
       slot_id: activeSlot,
       comp_code: player.comp_code,
       comp_nom: player.comp_nom,
@@ -326,6 +353,9 @@ export async function renderSeasonXi(el, state) {
     paint();
     loadBrowse(document.getElementById('xi-search')?.value ?? '');
     saveDraft();
+    if (natural !== slot.role) {
+      showToast(`${player.player_name} placé hors poste (${posLabel(natural)} → ${posLabel(slot.role)})`);
+    }
   }
 
   function removePlayer(playerId) {
