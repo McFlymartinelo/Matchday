@@ -54,6 +54,12 @@ export const groups = {
   clubs: (groupId) => api(`/groups/${groupId}/clubs`),
 };
 
+export const specialBets = {
+  list: (groupId) => api(`/groups/${groupId}/special-bets`),
+  teams: (groupId, competitionId) => api(`/groups/${groupId}/special-bets/teams/${competitionId}`),
+  save: (groupId, body) => api(`/groups/${groupId}/special-bets`, { method: 'POST', body: JSON.stringify(body) }),
+};
+
 export const matches = {
   list: (groupId, params = {}) => {
     const q = new URLSearchParams(params).toString();
@@ -81,6 +87,7 @@ export const standings = {
     return api(`/groups/${groupId}/stats${q}`);
   },
   profile: (groupId) => api(`/groups/${groupId}/profile`),
+  analytics: (groupId) => api(`/groups/${groupId}/analytics`),
 };
 
 export const seasonXi = {
@@ -134,6 +141,15 @@ export function compColors(code) {
     BL1: { color: 'var(--bundesliga)', bg: 'var(--bundesliga-bg)', cls: 'bl1' },
   };
   return map[code] ?? { color: 'var(--pl)', bg: 'var(--pl-bg)', cls: 'pl' };
+}
+
+export function compLogoHtml(comp, className = 'comp-logo') {
+  if (comp?.logo) {
+    const fallback = comp.emoji ?? comp.code ?? '';
+    return `<img src="${comp.logo}" alt="" class="${className}" loading="lazy"
+      onerror="this.outerHTML='${fallback.replace(/'/g, "\\'")}'">`;
+  }
+  return comp?.emoji ?? '';
 }
 
 export function teamCrest(name, compCode, teamId = null) {

@@ -1,4 +1,4 @@
-import { standings, teamCrest, compColors, showToast } from './api.js';
+import { standings, teamCrest, compColors, compLogoHtml, showToast } from './api.js';
 
 function renderLeagueTable(comp, rows) {
   const cc = compColors(comp.code);
@@ -10,7 +10,7 @@ function renderLeagueTable(comp, rows) {
       <div class="section-head">
         <div class="jn">
           <div class="comp-flag" style="background:${comp.couleurBg ?? cc.bg};color:${comp.couleur ?? cc.color}">${comp.code}</div>
-          ${comp.emoji ?? ''} ${comp.nom}
+          ${compLogoHtml(comp, 'comp-head-logo')} ${comp.nom}
         </div>
       </div>
       <div class="empty-state">Classement pas encore synchronisé.<br>La mise à jour se fait 1×/jour via BSD.</div>
@@ -21,7 +21,7 @@ function renderLeagueTable(comp, rows) {
     <div class="section-head">
       <div class="jn">
         <div class="comp-flag" style="background:${comp.couleurBg ?? cc.bg};color:${comp.couleur ?? cc.color}">${comp.code}</div>
-        ${comp.emoji ?? ''} ${comp.nom}
+        ${compLogoHtml(comp, 'comp-head-logo')} ${comp.nom}
       </div>
       <div class="countdown-bubble" style="color:${comp.couleur ?? cc.color};background:${comp.couleurBg ?? cc.bg}">
         ${rows.length} équipes

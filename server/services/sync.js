@@ -151,6 +151,8 @@ export async function syncStandings(competitionId, bsdLeagueId) {
     }
 
     await logSync('standings', 'ok', `${count} lignes ligue ${bsdLeagueId}`);
+    const { scoreChampionBetsForCompetition } = await import('../lib/championBets.js');
+    await scoreChampionBetsForCompetition(competitionId);
     return count;
   } catch (err) {
     await logSync('standings', 'error', err.message);

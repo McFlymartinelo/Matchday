@@ -1,10 +1,11 @@
-import { auth, groups, matches, standings, showToast, compColors, teamCrest, formatCountdown, initials } from './api.js';
+import { auth, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials } from './api.js';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
 import { renderProfile } from './profile.js';
 import { renderChampionships } from './championships.js';
 import { renderSeasonXi } from './seasonXi.js';
+import { renderStandingsScreen, compPillsHtml } from './standingsUi.js';
 import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, setupPushMessageListener } from './notifications.js';
 import { startMatchReminders, stopMatchReminders, handlePushPayload } from './reminders.js';
 
@@ -661,16 +662,6 @@ function closeGroupSwitcher() {
   document.getElementById('group-modal')?.classList.add('hidden');
 }
 
-function compPillsHtml() {
-  if (state.competitions.length <= 1) return '';
-  return `<div class="comp-grid">${state.competitions.map(c => {
-    const cc = compColors(c.code);
-    const active = c.id === state.activeComp ? `active ${cc.cls}` : '';
-    const style = c.id === state.activeComp ? '' : '';
-    return `<button class="comp-pill ${active}" data-comp="${c.id}" style="${c.id === state.activeComp ? `background:${c.couleur};color:white` : ''}">${c.emoji ?? ''} ${c.nom}</button>`;
-  }).join('')}</div>`;
-}
-
 function normTeamName(name) {
   return (name ?? '')
     .toLowerCase()
@@ -721,7 +712,7 @@ async function renderApp() {
   setAuthPage(false);
   app.innerHTML = `<div class="app-shell">
     ${headerHtml()}
-    ${state.screen === 'matches' || state.screen === 'standings' || state.screen === 'championships' ? compPillsHtml() : ''}
+    ${state.screen === 'matches' || state.screen === 'championships' ? compPillsHtml(state) : ''}
     <div id="screen-content"></div>
   </div>${navHtml()}`;
 
@@ -738,7 +729,7 @@ async function renderApp() {
   switch (state.screen) {
     case 'matches': await renderMatches(content); break;
     case 'championships': await renderChampionships(content, state); break;
-    case 'standings': await renderStandings(content); break;
+    case 'standings': await renderStandingsScreen(content, state); break;
     case 'chat': await renderChatScreen(content, state); break;
     case 'seasonxi': await renderSeasonXi(content, state); break;
     case 'profile': await renderProfile(content, state, renderApp); break;
@@ -848,50 +839,6 @@ async function onScoreChange(e) {
     renderApp();
   } catch (err) {
     showToast(err.message);
-  }
-}
-
-async function renderStandings(el) {
-  el.innerHTML = `<div class="tabs">
-    <button class="tab ${state.standingsTab === 'general' ? 'active' : ''}" data-tab="general">Général</button>
-    <button class="tab ${state.standingsTab === 'official' ? 'active' : ''}" data-tab="official">Championnat</button>
-    <button class="tab ${state.standingsTab === 'stats' ? 'active' : ''}" data-tab="stats">Stats</button>
-  </div><div id="standings-body"></div>`;
-
-  el.querySelectorAll('[data-tab]').forEach(btn => {
-    btn.onclick = () => { state.standingsTab = btn.dataset.tab; renderStandings(el); };
-  });
-
-  const body = document.getElementById('standings-body');
-  const compId = state.activeComp;
-
-  if (state.standingsTab === 'general') {
-    const rows = await standings.general(state.group.id, compId);
-    const activeComp = state.competitions.find(c => c.id === compId);
-    const cc = activeComp ? compColors(activeComp.code) : compColors('L1');
-    body.innerHTML = `<div class="section-card standings-card">
-      <div class="section-head"><div class="jn">Classement</div></div>
-      ${rows.map((r, i) => {
-        const isMe = r.userId === state.user.id;
-        return `<div class="row ${isMe ? 'me' : ''}" style="${isMe ? `background:${cc.bg}` : ''}">
-          <div class="medal" style="${isMe ? `background:${cc.color};color:white` : ''}">${i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</div>
-          <div class="name" style="${isMe ? `color:${cc.color}` : ''}">${r.displayName}
-            ${r.xiPoints ? `<div class="sub-pts">11 de saison : +${r.xiPoints} pts</div>` : ''}
-          </div>
-          <div class="pts">${r.totalPoints} pts</div>
-        </div>`;
-      }).join('')}
-    </div>`;
-  } else if (state.standingsTab === 'official' && compId) {
-    const rows = await standings.official(state.group.id, compId);
-    body.innerHTML = `<div class="section-card"><div class="section-head"><div class="jn">Classement officiel</div></div>
-      ${rows.length ? rows.map(r => `<div class="row"><div class="medal">${r.position}</div><div class="name">${r.team_name}</div><div class="pts">${r.points} pts</div></div>`).join('') : '<div class="empty-state">Pas encore de données</div>'}
-    </div>`;
-  } else if (state.standingsTab === 'stats') {
-    const stats = await standings.stats(state.group.id);
-    body.innerHTML = `<div class="section-card"><div class="section-head"><div class="jn">Évolution</div></div>
-      <div class="empty-state">${stats.timeline?.length ?? 0} journées enregistrées</div>
-    </div>`;
   }
 }
 

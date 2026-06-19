@@ -1,11 +1,11 @@
 import { run, get } from './connection.js';
 
 const COMPETITIONS = [
-  { code: 'L1', bsd_league_id: null, nom: 'Ligue 1', pays: 'France', emoji: '🇫🇷', couleur: '#2D8B57', couleur_bg: '#E2F5EA' },
-  { code: 'PL', bsd_league_id: null, nom: 'Premier League', pays: 'Angleterre', emoji: '🏴', couleur: '#6B3FD6', couleur_bg: '#EFE8FC' },
-  { code: 'PD', bsd_league_id: null, nom: 'Liga', pays: 'Espagne', emoji: '🇪🇸', couleur: '#E0532E', couleur_bg: '#FCE7E1' },
-  { code: 'SA', bsd_league_id: null, nom: 'Serie A', pays: 'Italie', emoji: '🇮🇹', couleur: '#1C6FD0', couleur_bg: '#E3EFFC' },
-  { code: 'BL1', bsd_league_id: null, nom: 'Bundesliga', pays: 'Allemagne', emoji: '🇩🇪', couleur: '#C9701F', couleur_bg: '#FDF1E2' },
+  { code: 'L1', bsd_league_id: null, nom: 'Ligue 1', pays: 'France', emoji: '🇫🇷', logo: 'https://crests.football-data.org/FL1.svg', couleur: '#2D8B57', couleur_bg: '#E2F5EA' },
+  { code: 'PL', bsd_league_id: null, nom: 'Premier League', pays: 'Angleterre', emoji: '🏴', logo: 'https://crests.football-data.org/PL.svg', couleur: '#6B3FD6', couleur_bg: '#EFE8FC' },
+  { code: 'PD', bsd_league_id: null, nom: 'Liga', pays: 'Espagne', emoji: '🇪🇸', logo: 'https://crests.football-data.org/PD.svg', couleur: '#E0532E', couleur_bg: '#FCE7E1' },
+  { code: 'SA', bsd_league_id: null, nom: 'Serie A', pays: 'Italie', emoji: '🇮🇹', logo: 'https://crests.football-data.org/SA.svg', couleur: '#1C6FD0', couleur_bg: '#E3EFFC' },
+  { code: 'BL1', bsd_league_id: null, nom: 'Bundesliga', pays: 'Allemagne', emoji: '🇩🇪', logo: 'https://crests.football-data.org/BL1.svg', couleur: '#C9701F', couleur_bg: '#FDF1E2' },
 ];
 
 /** Matchs de démo si BSD indisponible — pronostics ouverts */
@@ -24,9 +24,14 @@ export async function seedCompetitions() {
     const existing = await get('SELECT id FROM competitions WHERE code = ?', [c.code]);
     if (!existing) {
       await run(
-        `INSERT INTO competitions (code, bsd_league_id, nom, pays, emoji, couleur, couleur_bg, saison_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?, '2025-2026')`,
-        [c.code, c.bsd_league_id, c.nom, c.pays, c.emoji, c.couleur, c.couleur_bg]
+        `INSERT INTO competitions (code, bsd_league_id, nom, pays, emoji, logo, couleur, couleur_bg, saison_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, '2025-2026')`,
+        [c.code, c.bsd_league_id, c.nom, c.pays, c.emoji, c.logo, c.couleur, c.couleur_bg]
+      );
+    } else {
+      await run(
+        'UPDATE competitions SET logo = ?, emoji = ?, nom = ?, couleur = ?, couleur_bg = ? WHERE code = ?',
+        [c.logo, c.emoji, c.nom, c.couleur, c.couleur_bg, c.code]
       );
     }
   }

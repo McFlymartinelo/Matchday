@@ -1,4 +1,4 @@
-import { auth, groups, standings, showToast } from './api.js';
+import { auth, groups, standings, specialBets, showToast, compLogoHtml } from './api.js';
 import { getTheme, setTheme } from './theme.js';
 
 import { computeBadges, formatRankingExport } from './badges.js';
@@ -127,17 +127,21 @@ export async function renderProfile(el, state, renderApp) {
 
   let clubTeams = [];
 
+  let championBets = [];
+
 
 
   try {
 
-    [bilan, ranking, clubTeams] = await Promise.all([
+    [bilan, ranking, clubTeams, championBets] = await Promise.all([
 
       standings.profile(state.group.id),
 
       standings.general(state.group.id),
 
       groups.clubs(state.group.id).catch(() => []),
+
+      specialBets.list(state.group.id).catch(() => []),
 
     ]);
 
@@ -150,6 +154,8 @@ export async function renderProfile(el, state, renderApp) {
     try { ranking = await standings.general(state.group.id); } catch { /* ignore */ }
 
     try { clubTeams = await groups.clubs(state.group.id); } catch { /* ignore */ }
+
+    try { championBets = await specialBets.list(state.group.id); } catch { /* ignore */ }
 
   }
 
@@ -262,6 +268,18 @@ export async function renderProfile(el, state, renderApp) {
         Précision ${bilan.precision}% · ${bilan.scoredCount} pronos notés sur ${bilan.finishedMatches} matchs terminés
 
       </div>
+
+    </div>
+
+
+
+    <div class="section-card">
+
+      <div class="section-head"><div class="jn">Vainqueur du championnat</div></div>
+
+      <p class="profile-desc">Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong>.</p>
+
+      <div id="champion-bets" class="champion-bets"></div>
 
     </div>
 
@@ -665,6 +683,116 @@ export async function renderProfile(el, state, renderApp) {
     }
 
   };
+
+
+
+  await mountChampionBets(state, championBets);
+
+}
+
+
+
+async function mountChampionBets(state, bets) {
+
+  const container = document.getElementById('champion-bets');
+
+  if (!container) return;
+
+  const comps = state.competitions ?? [];
+
+  if (!comps.length) {
+
+    container.innerHTML = '<div class="empty-state">Aucun championnat suivi</div>';
+
+    return;
+
+  }
+
+
+
+  container.innerHTML = comps.map(c => {
+
+    const bet = bets.find(b => b.betType === 'champion' && b.competitionId === c.id);
+
+    const pts = bet?.points ? `<span class="champion-bet-pts">+${bet.points} pts</span>` : '';
+
+    return `<div class="champion-bet-row" data-comp="${c.id}">
+
+      <div class="champion-bet-label">${compLogoHtml(c, 'comp-head-logo')} ${c.nom} ${pts}</div>
+
+      <select class="champion-bet-select" data-comp="${c.id}">
+
+        <option value="">— Choisir une équipe —</option>
+
+      </select>
+
+    </div>`;
+
+  }).join('');
+
+
+
+  for (const c of comps) {
+
+    const select = container.querySelector(`select[data-comp="${c.id}"]`);
+
+    const bet = bets.find(b => b.betType === 'champion' && b.competitionId === c.id);
+
+    try {
+
+      const teams = await specialBets.teams(state.group.id, c.id);
+
+      for (const team of teams) {
+
+        const opt = document.createElement('option');
+
+        opt.value = team;
+
+        opt.textContent = team;
+
+        if (bet?.betValue === team) opt.selected = true;
+
+        select.appendChild(opt);
+
+      }
+
+    } catch {
+
+      select.innerHTML = '<option value="">Équipes indisponibles</option>';
+
+    }
+
+    select.onchange = async () => {
+
+      if (!select.value) return;
+
+      try {
+
+        const res = await specialBets.save(state.group.id, {
+
+          competitionId: c.id,
+
+          betType: 'champion',
+
+          betValue: select.value,
+
+        });
+
+        const pts = res.bet?.points ? ` (+${res.bet.points} pts actuellement)` : '';
+
+        showToast(`Vainqueur ${c.nom} enregistré${pts}`);
+
+        renderApp();
+
+      } catch (err) {
+
+        showToast(err.message || 'Erreur');
+
+      }
+
+    };
+
+  }
 
 }
 

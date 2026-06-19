@@ -13,7 +13,7 @@ function generateInviteCode() {
 router.get('/competitions', authRequired, async (_req, res) => {
   const comps = await all('SELECT * FROM competitions ORDER BY id');
   res.json(comps.map(c => ({
-    id: c.id, code: c.code, nom: c.nom, pays: c.pays, emoji: c.emoji,
+    id: c.id, code: c.code, nom: c.nom, pays: c.pays, emoji: c.emoji, logo: c.logo,
     couleur: c.couleur, couleurBg: c.couleur_bg, saisonActive: c.saison_active,
   })));
 });
