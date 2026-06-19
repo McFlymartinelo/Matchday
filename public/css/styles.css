@@ -390,7 +390,7 @@ body.auth-page {
   background: var(--card-soft); color: var(--ink-soft); font-size: 14px;
   cursor: pointer; font-weight: 700;
 }
-.group-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; max-height: 240px; overflow-y: auto; }
+.group-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; max-height: 320px; overflow-y: auto; }
 .group-list-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 12px 14px; border-radius: 16px; border: 2px solid var(--border-soft);
@@ -407,6 +407,64 @@ body.auth-page {
 }
 .modal-actions { display: flex; flex-direction: column; gap: 8px; }
 .modal-actions .btn { margin-top: 0; }
+
+.group-card {
+  border-radius: 16px; border: 2px solid var(--border-soft);
+  background: var(--card-soft); overflow: hidden;
+  transition: border-color .15s, background .15s;
+}
+.group-card.active { border-color: var(--pl); background: var(--pl-bg); }
+.group-card-select {
+  display: block; width: 100%; padding: 12px 14px 8px;
+  border: none; background: transparent; cursor: pointer;
+  font-family: inherit; text-align: left;
+}
+.group-card-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.group-card-meta {
+  display: block; font-size: 12px; color: var(--ink-soft); margin-top: 2px;
+}
+.group-share {
+  padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.group-code {
+  font-size: 12px; font-weight: 700; color: var(--ink-soft);
+  background: var(--card); border: 1px solid var(--border-soft);
+  border-radius: 10px; padding: 8px 10px; letter-spacing: 0.04em;
+}
+.group-share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.group-share-btn {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 12px;
+  border: 1px solid var(--border-soft); background: var(--card);
+  font-family: inherit; font-size: 12px; font-weight: 700; color: var(--ink);
+  cursor: pointer; transition: background .15s, border-color .15s;
+}
+.group-share-btn:hover { border-color: var(--pl); background: var(--pl-bg); }
+.group-public-hint {
+  display: block; padding: 0 14px 12px; font-size: 11px; color: var(--ink-soft); font-weight: 600;
+}
+.modal-section { margin-bottom: 12px; }
+.modal-section-label {
+  display: block; font-size: 12px; font-weight: 800; color: var(--ink-soft);
+  margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.modal-inline-form { display: flex; gap: 8px; }
+.modal-inline-form input {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 12px;
+  border: 1.5px solid var(--border-soft); font-family: inherit; font-size: 14px;
+  background: var(--card); color: var(--ink); text-transform: uppercase;
+}
+.modal-inline-form input:focus { outline: none; border-color: var(--pl); }
+.modal-inline-form .btn { margin: 0; width: auto; flex-shrink: 0; padding-left: 14px; padding-right: 14px; }
+.invite-share-sheet { text-align: center; }
+.invite-share-code { font-size: 14px; color: var(--ink-soft); margin-bottom: 12px; }
+.invite-share-code strong { color: var(--ink); font-size: 18px; letter-spacing: 0.06em; }
+.invite-qr { display: block; margin: 0 auto 12px; border-radius: 12px; background: white; }
+.invite-share-link {
+  font-size: 11px; color: var(--ink-soft); word-break: break-all;
+  margin-bottom: 14px; line-height: 1.4;
+}
 
 /* legacy — utilisé ailleurs si besoin */
 .avatar {

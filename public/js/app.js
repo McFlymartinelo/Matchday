@@ -36,6 +36,7 @@ export async function init() {
     const groupId = savedGroupId && state.myGroups.find(g => g.id == savedGroupId)
       ? savedGroupId : state.myGroups[0].id;
     await loadGroup(groupId);
+    await handleInviteDeepLink();
     await syncPushIfEnabled();
     setupPushMessageListener((payload) => {
       handlePushPayload(payload, state, goToMatches);
@@ -98,6 +99,19 @@ async function renderAuth() {
     joinMode: 'pick',
   };
 
+  const pendingJoin = (
+    new URLSearchParams(window.location.search).get('join')
+    || new URLSearchParams(window.location.search).get('invite')
+    || sessionStorage.getItem('matchday_pending_join')
+    || ''
+  ).trim().toUpperCase();
+  if (pendingJoin) {
+    authUi.mode = 'register';
+    authUi.joinMode = 'code';
+    sessionStorage.setItem('matchday_pending_join', pendingJoin);
+    history.replaceState({}, '', window.location.pathname);
+  }
+
   app.innerHTML = `
     <div class="auth-screen">
       <div class="auth-wrap">
@@ -159,6 +173,10 @@ async function renderAuth() {
     joinCode.classList.toggle('hidden', !isRegister || authUi.joinMode !== 'code');
     submitBtn.textContent = isRegister ? "S'inscrire" : 'Se connecter';
     passwordEl.autocomplete = isRegister ? 'new-password' : 'current-password';
+    const inviteEl = document.getElementById('invite-code');
+    if (inviteEl && pendingJoin && isRegister && authUi.joinMode === 'code') {
+      inviteEl.value = pendingJoin;
+    }
   };
 
   document.querySelectorAll('.auth-tab').forEach(tab => {
@@ -233,6 +251,7 @@ async function doAuth(authUi) {
     }
 
     setAuthPage(false);
+    sessionStorage.removeItem('matchday_pending_join');
     await init();
   } catch (e) {
     errEl.textContent = e.message || 'Une erreur est survenue';
@@ -426,31 +445,176 @@ function attachHeaderEvents() {
   });
 }
 
+function getInviteCode(group) {
+  return (group?.inviteCode || group?.invite_code || '').toUpperCase();
+}
+
+function buildInviteLink(code) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('join', code);
+  return url.toString();
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copié !');
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast('Copié !');
+  }
+}
+
+async function handleInviteDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const code = (params.get('join') || params.get('invite') || '').trim().toUpperCase();
+  if (!code) return;
+
+  history.replaceState({}, '', window.location.pathname);
+  try {
+    const g = await groups.join({ inviteCode: code });
+    state.myGroups = await groups.list();
+    await loadGroup(g.id);
+    showToast(`Bienvenue dans « ${g.name} » !`);
+    renderApp();
+  } catch (e) {
+    showToast(e.message || 'Code invalide');
+    openGroupSwitcher(code);
+  }
+}
+
+function openInviteShareModal(group) {
+  document.getElementById('invite-share-modal')?.remove();
+  const code = getInviteCode(group);
+  if (!code) return;
+  const link = buildInviteLink(code);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(link)}`;
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-overlay" id="invite-share-modal">
+      <div class="modal-sheet invite-share-sheet">
+        <div class="modal-head">
+          <span class="jn">Inviter — ${group.name}</span>
+          <button type="button" class="modal-close" id="close-invite-share" aria-label="Fermer">✕</button>
+        </div>
+        <p class="invite-share-code">Code : <strong>${code}</strong></p>
+        <img src="${qrUrl}" alt="" class="invite-qr" width="180" height="180">
+        <p class="invite-share-link">${link}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="copy-invite-link">Copier le lien</button>
+          <button type="button" class="btn btn-primary" id="native-share-invite">Partager</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modal = document.getElementById('invite-share-modal');
+  const close = () => modal.remove();
+  document.getElementById('close-invite-share').onclick = close;
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  document.getElementById('copy-invite-link').onclick = () => copyText(link);
+  document.getElementById('native-share-invite').onclick = async () => {
+    const shareData = {
+      title: 'Matchday',
+      text: `Rejoins mon groupe « ${group.name} » sur Matchday ! Code : ${code}`,
+      url: link,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch { /* annulé */ }
+    } else {
+      await copyText(link);
+    }
+  };
+}
+
+function renderGroupCard(g) {
+  const isActive = g.id === state.group?.id;
+  const code = getInviteCode(g);
+  const shareBlock = code ? `
+      <div class="group-share">
+        <span class="group-code">Code : ${code}</span>
+        <div class="group-share-actions">
+          <button type="button" class="group-share-btn" data-copy-code="${code}">📋 Copier</button>
+          <button type="button" class="group-share-btn" data-share-group="${g.id}">🔗 Lien + QR</button>
+        </div>
+        ${g.isPublic ? '<span class="group-public-hint">Groupe public — aussi visible à l\'inscription</span>' : ''}
+      </div>
+    ` : '';
+
+  return `
+    <div class="group-card ${isActive ? 'active' : ''}">
+      <button type="button" class="group-card-select" data-group-id="${g.id}">
+        <div class="group-card-header">
+          <span class="group-list-name">${g.name}</span>
+          ${isActive ? '<span class="group-list-badge">Actif</span>' : ''}
+        </div>
+        <span class="group-card-meta">${formatMemberCount(g.memberCount)}</span>
+      </button>
+      ${shareBlock}
+    </div>
+  `;
+}
+
 function groupSwitcherHtml() {
   return `<div class="modal-overlay hidden" id="group-modal">
     <div class="modal-sheet">
       <div class="modal-head">
-        <span class="jn">Changer de groupe</span>
+        <span class="jn">Mes groupes</span>
         <button type="button" class="modal-close" id="close-group-modal" aria-label="Fermer">✕</button>
       </div>
       <div class="group-list" id="group-list"></div>
+      <div class="modal-section">
+        <span class="modal-section-label">Rejoindre avec un code</span>
+        <div class="modal-inline-form">
+          <input id="modal-join-code" placeholder="EX. CDM7X2K" autocomplete="off">
+          <button type="button" class="btn btn-primary" id="modal-join-submit">Rejoindre</button>
+        </div>
+        <div class="error-msg hidden" id="modal-join-error"></div>
+      </div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" id="modal-join-group">Rejoindre un groupe</button>
-        <button type="button" class="btn btn-primary" id="modal-create-group">Créer un groupe</button>
+        <button type="button" class="btn btn-secondary" id="modal-create-group">Créer un groupe</button>
       </div>
     </div>
   </div>`;
 }
 
-async function openGroupSwitcher() {
+async function openGroupSwitcher(prefillCode = '') {
   let modal = document.getElementById('group-modal');
   if (!modal) {
     document.body.insertAdjacentHTML('beforeend', groupSwitcherHtml());
     modal = document.getElementById('group-modal');
     document.getElementById('close-group-modal').onclick = closeGroupSwitcher;
     modal.addEventListener('click', (e) => { if (e.target === modal) closeGroupSwitcher(); });
-    document.getElementById('modal-join-group').onclick = () => { closeGroupSwitcher(); renderJoinGroup(); };
     document.getElementById('modal-create-group').onclick = () => { closeGroupSwitcher(); renderCreateGroup(); };
+    document.getElementById('modal-join-submit').onclick = async () => {
+      const errEl = document.getElementById('modal-join-error');
+      const code = document.getElementById('modal-join-code').value.trim();
+      errEl.classList.add('hidden');
+      if (!code) {
+        errEl.textContent = 'Entre un code d\'invitation';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      try {
+        const g = await groups.join({ inviteCode: code });
+        state.myGroups = await groups.list();
+        await loadGroup(g.id);
+        closeGroupSwitcher();
+        showToast(`Groupe « ${g.name} » rejoint !`);
+        renderApp();
+      } catch (e) {
+        errEl.textContent = e.message || 'Code invalide';
+        errEl.classList.remove('hidden');
+      }
+    };
   }
 
   try {
@@ -458,13 +622,7 @@ async function openGroupSwitcher() {
   } catch { /* garde la liste en cache */ }
 
   const list = document.getElementById('group-list');
-  list.innerHTML = state.myGroups.map(g => `
-    <button type="button" class="group-list-item ${g.id === state.group?.id ? 'active' : ''}" data-group-id="${g.id}">
-      <span class="group-list-icon">👥</span>
-      <span class="group-list-name">${g.name}</span>
-      ${g.id === state.group?.id ? '<span class="group-list-badge">Actif</span>' : ''}
-    </button>
-  `).join('');
+  list.innerHTML = state.myGroups.map(renderGroupCard).join('');
 
   list.querySelectorAll('[data-group-id]').forEach(btn => {
     btn.onclick = async () => {
@@ -476,6 +634,25 @@ async function openGroupSwitcher() {
       renderApp();
     };
   });
+
+  list.querySelectorAll('[data-copy-code]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      copyText(btn.dataset.copyCode);
+    };
+  });
+
+  list.querySelectorAll('[data-share-group]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const group = state.myGroups.find(g => g.id === Number(btn.dataset.shareGroup));
+      if (group) openInviteShareModal(group);
+    };
+  });
+
+  const joinInput = document.getElementById('modal-join-code');
+  if (joinInput) joinInput.value = prefillCode;
+  document.getElementById('modal-join-error')?.classList.add('hidden');
 
   modal.classList.remove('hidden');
 }

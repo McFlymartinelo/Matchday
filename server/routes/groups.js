@@ -44,14 +44,22 @@ router.post('/', authRequired, async (req, res) => {
 });
 
 router.get('/mine', authRequired, async (req, res) => {
-  const groups = await all(
-    `SELECT g.* FROM groups g
+  const rows = await all(
+    `SELECT g.id, g.name, g.invite_code, g.is_public,
+            (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) AS member_count
+     FROM groups g
      JOIN group_members gm ON gm.group_id = g.id
      WHERE gm.user_id = ?
      ORDER BY g.name`,
     [req.user.id]
   );
-  res.json(groups);
+  res.json(rows.map(g => ({
+    id: g.id,
+    name: g.name,
+    inviteCode: g.invite_code,
+    isPublic: !!g.is_public,
+    memberCount: Number(g.member_count ?? 0),
+  })));
 });
 
 router.get('/public/list', async (_req, res) => {
