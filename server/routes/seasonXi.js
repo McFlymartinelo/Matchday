@@ -3,6 +3,7 @@ import { all, get, run } from '../db/connection.js';
 import { authRequired, groupMemberRequired } from '../middleware/auth.js';
 import { validateSeasonXiPlayers } from '../lib/scoring.js';
 import { getGroupTeamMap } from '../services/groupTeams.js';
+import { getGroupPrimarySeason } from '../lib/season.js';
 import * as bsd from '../services/bsd.js';
 
 const router = Router();
@@ -19,7 +20,7 @@ function mapPlayerForGroup(player, teamMap) {
 }
 
 router.get('/:groupId/season-xi', authRequired, groupMemberRequired, async (req, res) => {
-  const season = req.query.season ?? '2025-2026';
+  const season = req.query.season ?? await getGroupPrimarySeason(req.groupId);
   const userId = req.query.userId ? Number(req.query.userId) : req.user.id;
 
   const xi = await get(
@@ -55,7 +56,8 @@ router.get('/:groupId/season-xi', authRequired, groupMemberRequired, async (req,
 });
 
 router.put('/:groupId/season-xi', authRequired, groupMemberRequired, async (req, res) => {
-  const { players, formation = '433', season = '2025-2026' } = req.body;
+  const { players, formation = '433', season: seasonBody } = req.body;
+  const season = seasonBody ?? await getGroupPrimarySeason(req.groupId);
   const group = await get('SELECT season_xi_deadline FROM groups WHERE id = ?', [req.groupId]);
 
   if (group?.season_xi_deadline && new Date(group.season_xi_deadline) <= new Date()) {
@@ -202,7 +204,7 @@ router.get('/:groupId/season-xi/browse', authRequired, groupMemberRequired, asyn
 router.get('/:groupId/season-xi/matchday-xi/:competitionId/:matchday', authRequired, groupMemberRequired, async (req, res) => {
   const rows = await all(
     'SELECT * FROM matchday_xi WHERE competition_id = ? AND season = ? AND matchday = ? ORDER BY position',
-    [req.params.competitionId, req.query.season ?? '2025-2026', req.params.matchday]
+    [req.params.competitionId, req.query.season ?? await getGroupPrimarySeason(req.groupId), req.params.matchday]
   );
   res.json(rows);
 });

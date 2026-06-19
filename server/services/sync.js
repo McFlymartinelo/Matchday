@@ -38,23 +38,13 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
     let seasonLabel = '2025-2026';
     try {
       const league = await bsd.getLeague(bsdLeagueId);
-      const seasonId = league.current_season?.id;
-      seasonLabel = bsd.seasonLabelFromBsd(league.current_season);
-      if (seasonId) {
-        const raw = await bsd.getAllSeasonEvents(bsdLeagueId, seasonId);
-        const allowedTeams = await bsd.getStandingTeamNames(bsdLeagueId);
-        events = bsd.filterValidLeagueEvents(raw, allowedTeams);
-        const dropped = raw.length - events.length;
-        if (dropped > 0) {
-          await logSync('fixtures', 'ok', `${dropped} matchs parasites ignorés (ligue ${bsdLeagueId})`);
-        }
-      }
+      events = await bsd.collectLeagueFixtures(bsdLeagueId, league);
+      seasonLabel = bsd.resolveActiveSeasonLabel(league, events);
     } catch {
       // Fallback : matchs des 30 prochains jours
       const from = new Date().toISOString().slice(0, 10);
       const to = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-      const data = await bsd.getEvents({ league_id: bsdLeagueId, date_from: from, date_to: to, limit: 200 });
-      events = bsd.extractResults(data);
+      events = await bsd.getEventsByDateRange(bsdLeagueId, from, to);
     }
 
     const keptIds = new Set();
@@ -63,6 +53,7 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
       const norm = bsd.normalizeEvent(event, competitionId);
       if (!norm.kickoff_at) continue;
       keptIds.add(norm.bsd_event_id);
+      const matchSeason = bsd.seasonLabelFromKickoff(norm.kickoff_at);
 
       await run(
         `INSERT INTO matches (bsd_event_id, competition_id, home_team_name, away_team_name,
@@ -76,7 +67,7 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
            kickoff_at = excluded.kickoff_at, season = excluded.season, updated_at = datetime('now')`,
         [norm.bsd_event_id, norm.competition_id, norm.home_team_name, norm.away_team_name,
          norm.home_bsd_team_id, norm.away_bsd_team_id,
-         norm.home_score, norm.away_score, norm.status, norm.matchday, norm.kickoff_at, seasonLabel]
+         norm.home_score, norm.away_score, norm.status, norm.matchday, norm.kickoff_at, matchSeason]
       );
       count++;
     }
@@ -127,21 +118,36 @@ export async function syncLiveScores() {
 
 export async function syncStandings(competitionId, bsdLeagueId) {
   try {
+    const comp = await get('SELECT saison_active FROM competitions WHERE id = ?', [competitionId]);
+    const seasonLabel = comp?.saison_active ?? '2025-2026';
+
     const data = await bsd.getStandings(bsdLeagueId);
-    const rows = data.standings ?? bsd.extractResults(data);
+    let rows = data.standings ?? bsd.extractResults(data);
     let count = 0;
+
+    if (!rows.length) {
+      const teams = await all(
+        `SELECT team_name FROM (
+           SELECT home_team_name AS team_name FROM matches WHERE competition_id = ? AND season = ?
+           UNION
+           SELECT away_team_name FROM matches WHERE competition_id = ? AND season = ?
+         ) ORDER BY team_name`,
+        [competitionId, seasonLabel, competitionId, seasonLabel]
+      );
+      rows = teams.map((t, i) => ({ position: i + 1, team_name: t.team_name, played: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0, points: 0 }));
+    }
 
     for (const row of rows) {
       const teamName = row.team?.name ?? row.team_name ?? row.name;
       if (!teamName) continue;
       await run(
         `INSERT INTO official_standings (competition_id, season, position, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at)
-         VALUES (?, '2025-2026', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(competition_id, season, team_name) DO UPDATE SET
            position = excluded.position, played = excluded.played, won = excluded.won,
            drawn = excluded.drawn, lost = excluded.lost, goals_for = excluded.goals_for,
            goals_against = excluded.goals_against, points = excluded.points, updated_at = datetime('now')`,
-        [competitionId, row.position ?? row.rank, teamName,
+        [competitionId, seasonLabel, row.position ?? row.rank, teamName,
          row.played ?? row.all?.played ?? 0, row.won ?? row.all?.win ?? 0,
          row.drawn ?? row.all?.draw ?? 0, row.lost ?? row.all?.lose ?? 0,
          row.goals_for ?? row.all?.goals?.for ?? 0, row.goals_against ?? row.all?.goals?.against ?? 0,
@@ -150,9 +156,9 @@ export async function syncStandings(competitionId, bsdLeagueId) {
       count++;
     }
 
-    await logSync('standings', 'ok', `${count} lignes ligue ${bsdLeagueId}`);
+    await logSync('standings', 'ok', `${count} lignes ligue ${bsdLeagueId} (${seasonLabel})`);
     const { scoreChampionBetsForCompetition } = await import('../lib/championBets.js');
-    await scoreChampionBetsForCompetition(competitionId);
+    await scoreChampionBetsForCompetition(competitionId, seasonLabel);
     return count;
   } catch (err) {
     await logSync('standings', 'error', err.message);

@@ -3,6 +3,7 @@ import { all, get, run } from '../db/connection.js';
 import { authRequired, groupMemberRequired } from '../middleware/auth.js';
 import { scoreSpecialBet } from '../lib/scoring.js';
 import { scoreChampionBetsForCompetition } from '../lib/championBets.js';
+import { getCompetitionSeason } from '../lib/season.js';
 
 const router = Router();
 
@@ -29,24 +30,29 @@ router.get('/:groupId/special-bets/teams/:competitionId', authRequired, groupMem
   );
   if (!member) return res.status(403).json({ error: 'Championnat non suivi' });
 
+  const season = await getCompetitionSeason(compId);
   let teams = await all(
     'SELECT team_name FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
-    [compId, '2025-2026']
+    [compId, season]
   );
   if (!teams.length) {
     teams = await all(
-      `SELECT DISTINCT t.name as team_name FROM teams t WHERE t.competition_id = ? ORDER BY t.name`,
-      [compId]
+      `SELECT team_name FROM (
+         SELECT home_team_name AS team_name FROM matches WHERE competition_id = ? AND season = ?
+         UNION SELECT away_team_name FROM matches WHERE competition_id = ? AND season = ?
+       ) ORDER BY team_name`,
+      [compId, season, compId, season]
     );
   }
   res.json(teams.map(t => t.team_name));
 });
 
 router.post('/:groupId/special-bets', authRequired, groupMemberRequired, async (req, res) => {
-  const { competitionId, betType, betValue, season = '2025-2026' } = req.body;
+  const { competitionId, betType, betValue, season: seasonBody } = req.body;
   if (!competitionId || !betType || !betValue) {
     return res.status(400).json({ error: 'Champs requis manquants' });
   }
+  const season = seasonBody ?? await getCompetitionSeason(Number(competitionId));
 
   const member = await get(
     'SELECT 1 FROM group_competitions WHERE group_id = ? AND competition_id = ?',

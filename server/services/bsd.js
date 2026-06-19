@@ -88,6 +88,34 @@ export async function getStandings(leagueId, params = {}) {
   return bsdFetch(`/api/v2/leagues/${leagueId}/standings/`, params);
 }
 
+/** Matchs sur une plage de dates (pagination). */
+export async function getEventsByDateRange(leagueId, dateFrom, dateTo) {
+  const events = [];
+  const pageSize = 200;
+  for (let offset = 0; offset < 2000; offset += pageSize) {
+    const data = await getEvents({
+      league_id: leagueId,
+      date_from: dateFrom,
+      date_to: dateTo,
+      limit: pageSize,
+      offset,
+    });
+    const batch = extractResults(data);
+    events.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  return events;
+}
+
+export function seasonLabelFromKickoff(isoDate) {
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return '2025-2026';
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  if (m >= 6) return `${y}-${y + 1}`;
+  return `${y - 1}-${y}`;
+}
+
 export async function getUnavailable(eventId) {
   return bsdFetch(`/api/v2/events/${eventId}/unavailable/`);
 }
@@ -120,9 +148,10 @@ export function normalizeTeamName(name) {
 }
 
 /** Équipes du classement officiel BSD (source de vérité pour filtrer les matchs parasites). */
-export async function getStandingTeams(leagueId) {
+export async function getStandingTeams(leagueId, seasonId = null) {
   try {
-    const data = await getStandings(leagueId);
+    const params = seasonId ? { season_id: seasonId } : {};
+    const data = await getStandings(leagueId, params);
     const rows = data.standings ?? extractResults(data);
     if (rows.length < 8) return null;
     return rows
@@ -136,8 +165,8 @@ export async function getStandingTeams(leagueId) {
   }
 }
 
-export async function getStandingTeamNames(leagueId) {
-  const teams = await getStandingTeams(leagueId);
+export async function getStandingTeamNames(leagueId, seasonId = null) {
+  const teams = await getStandingTeams(leagueId, seasonId);
   if (!teams?.length) return null;
   return new Set(teams.map(t => normalizeTeamName(t.team_name)));
 }
@@ -184,9 +213,55 @@ export function filterEventsByRoundDateConsistency(events) {
 }
 
 export function filterValidLeagueEvents(events, allowedTeams) {
-  let list = events.filter(e => eventTeamsInStandings(e, allowedTeams));
+  let list = allowedTeams?.size
+    ? events.filter(e => eventTeamsInStandings(e, allowedTeams))
+    : events;
   list = filterEventsByRoundDateConsistency(list);
   return list;
+}
+
+/** Calendrier complet : saison courante BSD + matchs à venir (saison suivante souvent absente de current_season). */
+export async function collectLeagueFixtures(leagueId, league) {
+  const rawById = new Map();
+  const currentSeasonId = league?.current_season?.id;
+
+  if (currentSeasonId) {
+    const current = await getAllSeasonEvents(leagueId, currentSeasonId);
+    for (const e of current) rawById.set(e.id, e);
+  }
+
+  const from = new Date().toISOString().slice(0, 10);
+  const to = new Date(Date.now() + 400 * 86400000).toISOString().slice(0, 10);
+  const upcoming = await getEventsByDateRange(leagueId, from, to);
+  for (const e of upcoming) rawById.set(e.id, e);
+
+  const bySeason = new Map();
+  for (const e of rawById.values()) {
+    const sid = e.season_id ?? currentSeasonId ?? 0;
+    if (!bySeason.has(sid)) bySeason.set(sid, []);
+    bySeason.get(sid).push(e);
+  }
+
+  const events = [];
+  for (const [seasonId, seasonEvents] of bySeason) {
+    const allowed = await getStandingTeamNames(leagueId, seasonId || null);
+    events.push(...filterValidLeagueEvents(seasonEvents, allowed));
+  }
+
+  return events;
+}
+
+export function resolveActiveSeasonLabel(league, events) {
+  const now = Date.now();
+  const future = events
+    .filter(e => {
+      const t = new Date(e.event_date ?? e.date ?? e.kickoff).getTime();
+      return !Number.isNaN(t) && t >= now && (e.status === 'notstarted' || e.status === 'scheduled');
+    })
+    .sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
+
+  if (future.length) return seasonLabelFromKickoff(future[0].event_date);
+  return seasonLabelFromBsd(league?.current_season);
 }
 
 export function seasonLabelFromBsd(season) {

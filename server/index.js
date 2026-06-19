@@ -69,6 +69,7 @@ async function initData() {
     try {
       await syncLeagueIds();
       await syncAllCompetitions();
+      await syncAllStandings();
       console.log('Sync BSD : calendrier importé');
     } catch (err) {
       console.warn('Sync BSD échouée :', err.message);

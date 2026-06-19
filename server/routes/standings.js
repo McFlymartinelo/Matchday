@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { all, get, run } from '../db/connection.js';
 import { authRequired, groupMemberRequired } from '../middleware/auth.js';
+import { getCompetitionSeason } from '../lib/season.js';
 
 const router = Router();
 
@@ -115,9 +116,10 @@ router.get('/:groupId/standings/official/:competitionId', authRequired, groupMem
   );
   if (!member) return res.status(403).json({ error: 'Championnat non suivi par ce groupe' });
 
+  const season = await getCompetitionSeason(compId);
   const rows = await all(
     'SELECT * FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
-    [compId, '2025-2026']
+    [compId, season]
   );
   res.json(rows);
 });
@@ -134,9 +136,10 @@ router.get('/:groupId/standings/official', authRequired, groupMemberRequired, as
 
   const result = [];
   for (const c of comps) {
+    const season = c.saison_active ?? '2025-2026';
     const rows = await all(
       'SELECT position, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
-      [c.id, '2025-2026']
+      [c.id, season]
     );
     result.push({
       competition: {
