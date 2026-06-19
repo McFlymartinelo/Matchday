@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS season_xi (
   user_id INTEGER NOT NULL REFERENCES users(id),
   group_id INTEGER NOT NULL REFERENCES groups(id),
   season TEXT NOT NULL,
+  formation TEXT DEFAULT '433',
   locked_at TEXT,
   UNIQUE(user_id, group_id, season)
 );
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS season_xi_players (
   team_name TEXT NOT NULL,
   competition_id INTEGER NOT NULL REFERENCES competitions(id),
   position TEXT NOT NULL,
+  slot_id TEXT,
   UNIQUE(season_xi_id, player_id),
   UNIQUE(season_xi_id, team_id)
 );

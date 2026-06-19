@@ -95,8 +95,11 @@ export const seasonXi = {
     const q = userId ? `?userId=${userId}` : '';
     return api(`/groups/${groupId}/season-xi${q}`);
   },
-  save: (groupId, players) =>
-    api(`/groups/${groupId}/season-xi`, { method: 'PUT', body: JSON.stringify({ players }) }),
+  save: (groupId, players, formation = '433') =>
+    api(`/groups/${groupId}/season-xi`, {
+      method: 'PUT',
+      body: JSON.stringify({ players, formation }),
+    }),
   search: (groupId, q, competitionId) => {
     const params = new URLSearchParams({ q });
     if (competitionId) params.set('competitionId', competitionId);

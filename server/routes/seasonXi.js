@@ -47,6 +47,7 @@ router.get('/:groupId/season-xi', authRequired, groupMemberRequired, async (req,
   res.json({
     seasonXi: xi,
     players,
+    formation: xi?.formation ?? '433',
     bonusTotal: bonusTotal?.total ?? 0,
     deadline: group?.season_xi_deadline,
     isLocked: !!xi?.locked_at || (group?.season_xi_deadline && new Date(group.season_xi_deadline) <= new Date()),
@@ -54,7 +55,7 @@ router.get('/:groupId/season-xi', authRequired, groupMemberRequired, async (req,
 });
 
 router.put('/:groupId/season-xi', authRequired, groupMemberRequired, async (req, res) => {
-  const { players, season = '2025-2026' } = req.body;
+  const { players, formation = '433', season = '2025-2026' } = req.body;
   const group = await get('SELECT season_xi_deadline FROM groups WHERE id = ?', [req.groupId]);
 
   if (group?.season_xi_deadline && new Date(group.season_xi_deadline) <= new Date()) {
@@ -64,6 +65,7 @@ router.put('/:groupId/season-xi', authRequired, groupMemberRequired, async (req,
   const normalized = (players ?? []).map(p => ({
     ...p,
     position: bsd.normalizeXiPosition(p.position),
+    slot_id: p.slot_id ?? p.slotId ?? null,
   }));
 
   const validation = validateSeasonXiPlayers(normalized);
@@ -90,18 +92,20 @@ router.put('/:groupId/season-xi', authRequired, groupMemberRequired, async (req,
 
   if (!xi) {
     const result = await run(
-      'INSERT INTO season_xi (user_id, group_id, season) VALUES (?, ?, ?)',
-      [req.user.id, req.groupId, season]
+      'INSERT INTO season_xi (user_id, group_id, season, formation) VALUES (?, ?, ?, ?)',
+      [req.user.id, req.groupId, season, formation]
     );
     xi = { id: Number(result.lastInsertRowid) };
+  } else {
+    await run('UPDATE season_xi SET formation = ? WHERE id = ?', [formation, xi.id]);
   }
 
   await run('DELETE FROM season_xi_players WHERE season_xi_id = ?', [xi.id]);
   for (const p of normalized) {
     await run(
-      `INSERT INTO season_xi_players (season_xi_id, player_id, player_name, team_id, team_name, competition_id, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [xi.id, p.player_id, p.player_name, p.team_id, p.team_name, p.competition_id, p.position]
+      `INSERT INTO season_xi_players (season_xi_id, player_id, player_name, team_id, team_name, competition_id, position, slot_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [xi.id, p.player_id, p.player_name, p.team_id, p.team_name, p.competition_id, p.position, p.slot_id]
     );
   }
 
