@@ -366,7 +366,7 @@ function headerHtml() {
 
   return `<div class="header">
     <div class="header-left">
-      <div class="logo-blob"><img src="/icons/icon-192.png?v=2" alt="" class="header-app-icon"></div>
+      <div class="logo-blob"><img src="/icons/icon-192.svg?v=3" alt="" class="header-app-icon"></div>
       <div class="header-brand">
         <div class="title">Matchday</div>
         <button type="button" class="group-tag" id="switch-group">
@@ -525,7 +525,7 @@ function resolveBsdTeamId(match, side, logoMap) {
 
 function navHtml() {
   const items = [
-    { id: 'matches', image: '/icons/nav-matches.png?v=1', label: 'Matchs' },
+    { id: 'matches', image: '/icons/nav-matches.svg?v=2', label: 'Matchs' },
     { id: 'championships', icon: '🏆', label: 'Championnats' },
     { id: 'standings', icon: '📊', label: 'Classement' },
     { id: 'chat', icon: '💬', label: 'Chat' },

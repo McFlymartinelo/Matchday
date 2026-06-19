@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Matchday">
+  <defs>
+    <clipPath id="leftHalf">
+      <rect x="0" y="0" width="256" height="512"/>
+    </clipPath>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#0B1524"/>
+
+  <g transform="translate(256 268)">
+    <circle r="172" fill="#164E56"/>
+    <g clip-path="url(#leftHalf)">
+      <circle r="172" fill="#2EC4B6"/>
+    </g>
+
+    <g fill="none" stroke="#E8F4F6" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round">
+      <circle r="172"/>
+      <path d="M0 -172 L50 -53 L0 66 L-50 -53 Z"/>
+      <path d="M50 -53 L162 -53 L101 34 L0 66 Z"/>
+      <path d="M-50 -53 L-162 -53 L-101 34 L0 66 Z"/>
+      <path d="M162 -53 L101 -140 L0 -172 L50 -53 Z"/>
+      <path d="M-162 -53 L-101 -140 L0 -172 L-50 -53 Z"/>
+      <path d="M101 34 L162 92 L50 150 L0 66 Z"/>
+      <path d="M-101 34 L-162 92 L-50 150 L0 66 Z"/>
+      <path d="M162 92 L101 150 L-101 150 L-162 92"/>
+      <path d="M50 150 L0 172 L-50 150"/>
+      <path d="M101 -140 L162 -116 L162 -53"/>
+      <path d="M-101 -140 L-162 -116 L-162 -53"/>
+    </g>
+
+    <path fill="#2EC4B6" d="M-32 -16 L-32 -54 L-12 -30 L0 -58 L12 -30 L32 -54 L32 -16 L20 -16 L20 -40 L0 -20 L-20 -40 L-20 -16 Z"/>
+  </g>
+</svg>
