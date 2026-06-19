@@ -1,4 +1,5 @@
 import { auth, groups, standings, showToast } from './api.js';
+import { getTheme, setTheme } from './theme.js';
 
 import { computeBadges, formatRankingExport } from './badges.js';
 
@@ -320,6 +321,24 @@ export async function renderProfile(el, state, renderApp) {
 
     <div class="section-card">
 
+      <div class="section-head"><div class="jn">Apparence</div></div>
+
+      <p class="profile-desc">Thème de l'application (clair ou sombre).</p>
+
+      <div class="theme-toggle">
+
+        <button type="button" class="theme-option ${getTheme() === 'light' ? 'active' : ''}" data-theme="light">☀️ Clair</button>
+
+        <button type="button" class="theme-option ${getTheme() === 'dark' ? 'active' : ''}" data-theme="dark">🌙 Sombre</button>
+
+      </div>
+
+    </div>
+
+
+
+    <div class="section-card">
+
       <div class="section-head"><div class="jn">Choisis ta couleur</div></div>
 
       <div class="color-picker" id="color-picker">
@@ -615,6 +634,17 @@ export async function renderProfile(el, state, renderApp) {
     renderApp();
 
   };
+
+
+
+  document.querySelectorAll('.theme-option').forEach(btn => {
+    btn.onclick = () => {
+      setTheme(btn.dataset.theme);
+      document.querySelectorAll('.theme-option').forEach(b => b.classList.toggle('active', b.dataset.theme === btn.dataset.theme));
+      showToast(btn.dataset.theme === 'dark' ? 'Mode sombre activé 🌙' : 'Mode clair activé ☀️');
+      renderApp();
+    };
+  });
 
 
 

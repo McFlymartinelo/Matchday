@@ -1,4 +1,6 @@
-import { auth, groups, matches, standings, chat, showToast, compColors, teamCrest, formatCountdown, initials } from './api.js';
+import { auth, groups, matches, standings, showToast, compColors, teamCrest, formatCountdown, initials } from './api.js';
+import { renderChatScreen } from './chatUi.js';
+import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
 import { renderProfile } from './profile.js';
 import { renderChampionships } from './championships.js';
@@ -558,7 +560,7 @@ async function renderApp() {
     case 'matches': await renderMatches(content); break;
     case 'championships': await renderChampionships(content, state); break;
     case 'standings': await renderStandings(content); break;
-    case 'chat': await renderChat(content); break;
+    case 'chat': await renderChatScreen(content, state); break;
     case 'seasonxi': await renderSeasonXi(content, state); break;
     case 'profile': await renderProfile(content, state, renderApp); break;
   }
@@ -712,33 +714,6 @@ async function renderStandings(el) {
       <div class="empty-state">${stats.timeline?.length ?? 0} journées enregistrées</div>
     </div>`;
   }
-}
-
-async function renderChat(el) {
-  const messages = await chat.list(state.group.id);
-  el.innerHTML = `<div class="section-card" style="min-height:400px;display:flex;flex-direction:column">
-    <div id="chat-msgs" style="flex:1;overflow-y:auto;max-height:360px">
-      ${messages.length ? messages.map(m => {
-        const mine = m.user_id === state.user.id;
-        const bg = mine ? (state.user.profileColor || 'var(--pl)') : '';
-        return `<div style="margin-bottom:12px">
-          <div class="chat-meta">${m.display_name}</div>
-          <div class="chat-bubble ${mine ? 'mine' : 'other'}" style="${mine ? `background:${bg}` : ''}">${m.content}</div>
-        </div>`;
-      }).join('') : '<div class="empty-state">Aucun message — lance la conversation !</div>'}
-    </div>
-    <div class="chat-input-row">
-      <input id="chat-input" placeholder="Ton message…">
-      <button class="btn btn-primary" style="width:auto;padding:12px 18px" id="chat-send">→</button>
-    </div>
-  </div>`;
-
-  document.getElementById('chat-send').onclick = async () => {
-    const input = document.getElementById('chat-input');
-    if (!input.value.trim()) return;
-    await chat.send(state.group.id, input.value.trim());
-    renderChat(el);
-  };
 }
 
 init();

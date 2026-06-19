@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { all, run } from '../db/connection.js';
+import { all, get, run } from '../db/connection.js';
 import { authRequired, groupMemberRequired } from '../middleware/auth.js';
 
 const router = Router();
@@ -17,7 +17,11 @@ router.get('/:groupId/chat', authRequired, groupMemberRequired, async (req, res)
       'SELECT emoji, COUNT(*) as count FROM chat_reactions WHERE message_id = ? GROUP BY emoji',
       [m.id]
     );
-    return { ...m, reactions };
+    const myReactions = await all(
+      'SELECT emoji FROM chat_reactions WHERE message_id = ? AND user_id = ?',
+      [m.id, req.user.id]
+    );
+    return { ...m, reactions, myReactions: myReactions.map(r => r.emoji) };
   }));
 
   res.json(withReactions.reverse());
@@ -36,12 +40,24 @@ router.post('/:groupId/chat', authRequired, groupMemberRequired, async (req, res
 
 router.post('/:groupId/chat/:messageId/reactions', authRequired, groupMemberRequired, async (req, res) => {
   const { emoji } = req.body;
-  await run(
-    `INSERT INTO chat_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)
-     ON CONFLICT(message_id, user_id, emoji) DO NOTHING`,
-    [req.params.messageId, req.user.id, emoji]
+  if (!emoji) return res.status(400).json({ error: 'Emoji requis' });
+
+  const messageId = Number(req.params.messageId);
+  const existing = await get(
+    'SELECT id FROM chat_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?',
+    [messageId, req.user.id, emoji]
   );
-  res.json({ ok: true });
+
+  if (existing) {
+    await run('DELETE FROM chat_reactions WHERE id = ?', [existing.id]);
+    return res.json({ ok: true, removed: true });
+  }
+
+  await run(
+    'INSERT INTO chat_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)',
+    [messageId, req.user.id, emoji]
+  );
+  res.json({ ok: true, added: true });
 });
 
 export default router;
