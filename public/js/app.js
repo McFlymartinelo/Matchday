@@ -366,7 +366,7 @@ function headerHtml() {
 
   return `<div class="header">
     <div class="header-left">
-      <div class="logo-blob"><img src="/icons/icon-192.svg?v=4" alt="" class="header-app-icon"></div>
+      <div class="logo-blob"><img src="/icons/icon-192.svg?v=5" alt="" class="header-app-icon"></div>
       <div class="header-brand">
         <div class="title">Matchday</div>
         <button type="button" class="group-tag" id="switch-group">
@@ -380,7 +380,7 @@ function headerHtml() {
         <span class="header-username">${name}</span>
       </button>
       <button type="button" class="header-icon-btn bell ${notifOn ? 'active' : ''}" id="header-notifications" title="Notifications — clic pour activer / retester">
-        <img src="/icons/icon-notif.svg?v=4" alt="" class="header-icon-img" width="18" height="18">
+        <img src="/icons/icon-notif.svg?v=5" alt="" class="header-icon-img" width="18" height="18">
       </button>
       <button type="button" class="header-icon-btn logout" id="header-logout" title="Déconnexion">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -525,12 +525,12 @@ function resolveBsdTeamId(match, side, logoMap) {
 
 function navHtml() {
   const items = [
-    { id: 'matches', image: '/icons/nav-matches.svg?v=4', label: 'Matchs' },
-    { id: 'championships', image: '/icons/nav-home.svg?v=4', label: 'Championnats' },
-    { id: 'standings', icon: '📊', label: 'Classement' },
-    { id: 'chat', icon: '💬', label: 'Chat' },
+    { id: 'matches', image: '/icons/nav-matches.svg?v=5', label: 'Matchs' },
+    { id: 'championships', image: '/icons/nav-league.svg?v=5', label: 'Championnats' },
+    { id: 'standings', image: '/icons/nav-stat.svg?v=5', label: 'Classement' },
+    { id: 'chat', image: '/icons/nav-chat.svg?v=5', label: 'Chat' },
     { id: 'seasonxi', icon: '⚽', label: 'Mon 11' },
-    { id: 'profile', icon: '👤', label: 'Profil' },
+    { id: 'profile', image: '/icons/nav-user.svg?v=5', label: 'Profil' },
   ];
   return `<div class="bottom-nav">${items.map(i =>
     `<button class="nav-item ${state.screen === i.id ? 'active' : ''}" data-nav="${i.id}">

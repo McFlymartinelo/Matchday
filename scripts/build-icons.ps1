@@ -68,12 +68,19 @@ $app.Dispose()
 # Nav / header icons (fond gris retiré)
 $navItems = @(
   @{ Src = 'nav-matches-source.png'; Out = 'nav-matches'; Label = 'Matchs' },
-  @{ Src = 'nav-home-source.png'; Out = 'nav-home'; Label = 'Championnats' },
+  @{ Src = 'nav-league-source.png'; Out = 'nav-league'; Label = 'Championnats' },
+  @{ Src = 'nav-stat-source.png'; Out = 'nav-stat'; Label = 'Classement' },
+  @{ Src = 'nav-chat-source.png'; Out = 'nav-chat'; Label = 'Chat' },
+  @{ Src = 'nav-user-source.png'; Out = 'nav-user'; Label = 'Profil' },
   @{ Src = 'nav-notif-source.png'; Out = 'icon-notif'; Label = 'Notifications' }
 )
 
 foreach ($item in $navItems) {
   $srcPath = Join-Path $iconsDir $item.Src
+  if (-not (Test-Path $srcPath)) {
+    Write-Warning "Source manquante: $($item.Src)"
+    continue
+  }
   $raw = [System.Drawing.Bitmap]::FromFile($srcPath)
   $clean = Remove-LightBackground $raw
   $size = 128
