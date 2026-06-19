@@ -752,18 +752,24 @@ async function renderMatches(el) {
 
     const byMatchday = {};
     for (const m of matchList) {
+      const season = m.season ?? m.saison_active ?? '2025-2026';
       const md = m.matchday ?? '?';
-      (byMatchday[md] ??= []).push(m);
+      const key = `${season}|${md}`;
+      (byMatchday[key] ??= []).push(m);
     }
 
     const sortedMatchdays = Object.entries(byMatchday).sort(([a], [b]) => {
-      const na = Number(a);
-      const nb = Number(b);
+      const [seasonA, mdA] = a.split('|');
+      const [seasonB, mdB] = b.split('|');
+      if (seasonA !== seasonB) return seasonA.localeCompare(seasonB, 'fr');
+      const na = Number(mdA);
+      const nb = Number(mdB);
       if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
-      return String(a).localeCompare(String(b), 'fr');
+      return String(mdA).localeCompare(String(mdB), 'fr');
     });
 
-    el.innerHTML = sortedMatchdays.map(([md, ms]) => {
+    el.innerHTML = sortedMatchdays.map(([key, ms]) => {
+      const [season, md] = key.split('|');
       const comp = state.competitions.find(c => c.id === ms[0].competition_id) ?? ms[0];
       const cc = compColors(comp.code ?? comp.comp_code);
       const openMatches = ms.filter(m => !m.isLocked);
@@ -771,9 +777,9 @@ async function renderMatches(el) {
       const cd = countdown ? formatCountdown(countdown.kickoff_at) : '';
       const allLocked = openMatches.length === 0;
 
-      return `<div class="section-card matchday-section ${allLocked ? 'matchday-past' : 'matchday-open'}" data-matchday="${md}">
+      return `<div class="section-card matchday-section ${allLocked ? 'matchday-past' : 'matchday-open'}" data-matchday="${md}" data-season="${season}">
         <div class="section-head">
-          <div class="jn"><div class="comp-flag" style="background:${cc.bg};color:${cc.color}">${comp.code ?? comp.comp_code}</div>Journée ${md}<span class="season-tag">${ms[0].season ?? comp.saison_active ?? '2025-2026'}</span></div>
+          <div class="jn"><div class="comp-flag" style="background:${cc.bg};color:${cc.color}">${comp.code ?? comp.comp_code}</div>Journée ${md}<span class="season-tag">${season}</span></div>
           ${cd ? `<div class="countdown-bubble">${cd}</div>` : allLocked ? '<div class="countdown-bubble locked">Terminée</div>' : ''}
         </div>
         ${ms.map(m => matchCardHtml(m, cc, logoMap)).join('')}

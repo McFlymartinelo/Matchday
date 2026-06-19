@@ -220,35 +220,38 @@ export function filterValidLeagueEvents(events, allowedTeams) {
   return list;
 }
 
-/** Calendrier complet : saison courante BSD + matchs à venir (saison suivante souvent absente de current_season). */
-export async function collectLeagueFixtures(leagueId, league) {
-  const rawById = new Map();
-  const currentSeasonId = league?.current_season?.id;
-
-  if (currentSeasonId) {
-    const current = await getAllSeasonEvents(leagueId, currentSeasonId);
-    for (const e of current) rawById.set(e.id, e);
-  }
-
+/** Matchs à venir sur ~13 mois (récupère la saison suivante quand current_season BSD est en retard). */
+export async function collectUpcomingFixtures(leagueId) {
   const from = new Date().toISOString().slice(0, 10);
   const to = new Date(Date.now() + 400 * 86400000).toISOString().slice(0, 10);
-  const upcoming = await getEventsByDateRange(leagueId, from, to);
-  for (const e of upcoming) rawById.set(e.id, e);
-
+  const raw = await getEventsByDateRange(leagueId, from, to);
   const bySeason = new Map();
-  for (const e of rawById.values()) {
-    const sid = e.season_id ?? currentSeasonId ?? 0;
+  for (const e of raw) {
+    const sid = e.season_id ?? 0;
     if (!bySeason.has(sid)) bySeason.set(sid, []);
     bySeason.get(sid).push(e);
   }
-
   const events = [];
   for (const [seasonId, seasonEvents] of bySeason) {
     const allowed = await getStandingTeamNames(leagueId, seasonId || null);
     events.push(...filterValidLeagueEvents(seasonEvents, allowed));
   }
-
   return events;
+}
+
+/** Calendrier complet : matchs à venir + saison courante BSD. */
+export async function collectLeagueFixtures(leagueId, league) {
+  const rawById = new Map();
+  const upcoming = await collectUpcomingFixtures(leagueId);
+  for (const e of upcoming) rawById.set(e.id, e);
+
+  const currentSeasonId = league?.current_season?.id;
+  if (currentSeasonId) {
+    const current = await getAllSeasonEvents(leagueId, currentSeasonId);
+    for (const e of current) rawById.set(e.id, e);
+  }
+
+  return [...rawById.values()];
 }
 
 export function resolveActiveSeasonLabel(league, events) {

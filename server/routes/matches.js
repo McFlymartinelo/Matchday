@@ -19,9 +19,13 @@ router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, r
   const placeholders = compIds.map(() => '?').join(',');
   const { competitionId, matchday } = req.query;
 
-  let sql = `SELECT m.*, c.code as comp_code, c.nom as comp_nom, c.couleur, c.couleur_bg, c.emoji
+  let sql = `SELECT m.*, c.code as comp_code, c.nom as comp_nom, c.couleur, c.couleur_bg, c.emoji, c.saison_active
              FROM matches m JOIN competitions c ON c.id = m.competition_id
-             WHERE m.competition_id IN (${placeholders})`;
+             WHERE m.competition_id IN (${placeholders})
+               AND (
+                 m.season = c.saison_active
+                 OR (m.kickoff_at >= datetime('now') AND m.status NOT IN ('finished', 'FT', 'ended'))
+               )`;
   const params = [...compIds];
 
   if (competitionId) { sql += ' AND m.competition_id = ?'; params.push(Number(competitionId)); }

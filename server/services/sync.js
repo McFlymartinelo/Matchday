@@ -36,23 +36,38 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
   try {
     let events = [];
     let seasonLabel = '2025-2026';
+    const from = new Date().toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 400 * 86400000).toISOString().slice(0, 10);
+
     try {
       const league = await bsd.getLeague(bsdLeagueId);
-      events = await bsd.collectLeagueFixtures(bsdLeagueId, league);
-      seasonLabel = bsd.resolveActiveSeasonLabel(league, events);
-    } catch {
-      // Fallback : matchs des 30 prochains jours
-      const from = new Date().toISOString().slice(0, 10);
-      const to = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+
+      // Chemin rapide : calendrier à venir (saison 26/27 même si BSD current_season = 25/26)
+      events = await bsd.collectUpcomingFixtures(bsdLeagueId);
+
+      // Enrichissement optionnel : saison courante complète (historique / live)
+      try {
+        const full = await bsd.collectLeagueFixtures(bsdLeagueId, league);
+        const byId = new Map(events.map(e => [e.id, e]));
+        for (const e of full) byId.set(e.id, e);
+        events = [...byId.values()];
+      } catch (innerErr) {
+        await logSync('fixtures', 'ok', `collect complet ignoré ligue ${bsdLeagueId}: ${innerErr.message}`);
+      }
+
+      seasonLabel = events.length
+        ? bsd.resolveActiveSeasonLabel(league, events)
+        : bsd.seasonLabelFromBsd(league.current_season);
+    } catch (err) {
+      await logSync('fixtures', 'ok', `collect ligue ${bsdLeagueId} en fallback: ${err.message}`);
       events = await bsd.getEventsByDateRange(bsdLeagueId, from, to);
+      if (events.length) seasonLabel = bsd.seasonLabelFromKickoff(events[0].event_date);
     }
 
-    const keptIds = new Set();
     let count = 0;
     for (const event of events) {
       const norm = bsd.normalizeEvent(event, competitionId);
       if (!norm.kickoff_at) continue;
-      keptIds.add(norm.bsd_event_id);
       const matchSeason = bsd.seasonLabelFromKickoff(norm.kickoff_at);
 
       await run(
@@ -72,13 +87,16 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
       count++;
     }
 
-    // Supprime les matchs BSD devenus invalides (ex. barrages L2 mal importés avant)
-    if (keptIds.size > 0) {
-      const placeholders = [...keptIds].map(() => '?').join(',');
+    if (count > 0) {
       await run(
-        `DELETE FROM matches WHERE competition_id = ? AND bsd_event_id IS NOT NULL
-         AND bsd_event_id NOT IN (${placeholders})`,
-        [competitionId, ...keptIds]
+        `DELETE FROM matches WHERE competition_id = ? AND bsd_event_id IS NOT NULL AND bsd_event_id < 0`,
+        [competitionId]
+      );
+      await run(
+        `DELETE FROM matches WHERE competition_id = ? AND season != ?
+         AND kickoff_at < datetime('now')
+         AND NOT EXISTS (SELECT 1 FROM predictions p WHERE p.match_id = matches.id)`,
+        [competitionId, seasonLabel]
       );
     }
 
@@ -87,7 +105,7 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
     await logSync('fixtures', 'ok', `${count} matchs ligue ${bsdLeagueId} (${seasonLabel})`);
     return count;
   } catch (err) {
-    await logSync('fixtures', 'error', err.message);
+    await logSync('fixtures', 'error', `ligue ${bsdLeagueId}: ${err.message}`);
     throw err;
   }
 }
@@ -250,10 +268,16 @@ async function logSync(type, status, details) {
 }
 
 export async function syncAllCompetitions() {
-  const comps = await all('SELECT id, bsd_league_id FROM competitions WHERE bsd_league_id IS NOT NULL');
+  const comps = await all('SELECT id, bsd_league_id, code FROM competitions WHERE bsd_league_id IS NOT NULL');
+  let total = 0;
   for (const c of comps) {
-    await syncFixtures(c.id, c.bsd_league_id);
+    try {
+      total += await syncFixtures(c.id, c.bsd_league_id);
+    } catch (err) {
+      console.error(`Sync calendrier ${c.code} échouée:`, err.message);
+    }
   }
+  return total;
 }
 
 export async function syncAllStandings() {

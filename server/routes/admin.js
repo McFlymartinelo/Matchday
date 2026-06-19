@@ -27,8 +27,8 @@ router.delete('/users/:id', authRequired, adminRequired, async (req, res) => {
 });
 
 router.post('/sync/fixtures', authRequired, adminRequired, async (_req, res) => {
-  await syncAllCompetitions();
-  res.json({ ok: true });
+  const total = await syncAllCompetitions();
+  res.json({ ok: true, matchCount: total });
 });
 
 router.post('/sync/scores', authRequired, adminRequired, async (_req, res) => {

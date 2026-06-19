@@ -26,8 +26,25 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // API
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', app: 'Matchday', time: new Date().toISOString() });
+app.get('/api/health', async (_req, res) => {
+  try {
+    const matchCount = Number((await get('SELECT COUNT(*) as n FROM matches'))?.n ?? 0);
+    const upcoming = Number((await get(
+      `SELECT COUNT(*) as n FROM matches WHERE kickoff_at >= datetime('now') AND status NOT IN ('finished', 'FT', 'ended')`
+    ))?.n ?? 0);
+    const lastSync = await get('SELECT sync_type, status, details, created_at FROM sync_log ORDER BY rowid DESC LIMIT 1');
+    res.json({
+      status: 'ok',
+      app: 'Matchday',
+      time: new Date().toISOString(),
+      matchCount,
+      upcomingMatches: upcoming,
+      hasBsdToken: !!process.env.BSD_API_TOKEN?.trim(),
+      lastSync: lastSync ?? null,
+    });
+  } catch {
+    res.json({ status: 'ok', app: 'Matchday', time: new Date().toISOString() });
+  }
 });
 
 app.use('/api/auth', authRoutes);
@@ -39,6 +56,24 @@ app.use('/api/groups', seasonXiRoutes);
 app.use('/api/groups', specialBetsRoutes);
 app.use('/api/groups', chatRoutes);
 app.use('/api/admin', adminRoutes);
+
+app.post('/api/sync/fixtures', async (req, res) => {
+  const secret = process.env.SYNC_SECRET?.trim();
+  if (!secret || req.headers['x-sync-secret'] !== secret) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (!process.env.BSD_API_TOKEN?.trim()) {
+    return res.status(400).json({ error: 'BSD_API_TOKEN manquant' });
+  }
+  try {
+    await syncLeagueIds();
+    const total = await syncAllCompetitions();
+    await syncAllStandings();
+    res.json({ ok: true, matchCount: total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Frontend statique
 app.use(express.static(join(__dirname, '../public')));
@@ -77,7 +112,7 @@ async function initData() {
   }
 
   const matchCount = Number((await get('SELECT COUNT(*) as n FROM matches'))?.n ?? 0);
-  if (matchCount === 0) {
+  if (matchCount === 0 && !process.env.BSD_API_TOKEN?.trim()) {
     await seedDemoMatches();
     console.log('Matchs de démo chargés (BSD indisponible ou vide)');
   }
