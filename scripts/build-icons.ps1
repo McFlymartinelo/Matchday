@@ -51,8 +51,11 @@ function Save-SvgFromPng {
 "@ | Set-Content -Path $Path -Encoding UTF8
 }
 
-# App icon (fond navy déjà présent)
+# App icon rond (fond navy, optimisé pour le masque circulaire Android)
 $appSrc = Join-Path $iconsDir 'icon-source.png'
+if (-not (Test-Path $appSrc)) {
+  $appSrc = Join-Path $iconsDir 'icon-source-round.png'
+}
 $app = [System.Drawing.Image]::FromFile($appSrc)
 foreach ($size in @(180, 192, 512)) {
   $scaled = Resize-Image $app $size

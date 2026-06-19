@@ -366,7 +366,7 @@ function headerHtml() {
 
   return `<div class="header">
     <div class="header-left">
-      <div class="logo-blob"><img src="/icons/icon-192.svg?v=5" alt="" class="header-app-icon"></div>
+      <div class="logo-blob"><img src="/icons/icon-192.png?v=6" alt="" class="header-app-icon"></div>
       <div class="header-brand">
         <div class="title">Matchday</div>
         <button type="button" class="group-tag" id="switch-group">
