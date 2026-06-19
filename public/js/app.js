@@ -51,11 +51,24 @@ export async function init() {
   }
 }
 
+async function pickCompetitionWithMatches(groupId, competitions) {
+  if (!competitions.length) return null;
+  try {
+    const list = await matches.list(groupId, {});
+    const open = list.filter(m => !m.isLocked);
+    if (open.length) {
+      open.sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at));
+      return open[0].competition_id;
+    }
+  } catch { /* ignore */ }
+  return competitions[0]?.id ?? null;
+}
+
 async function loadGroup(groupId) {
   stopMatchReminders();
   state.group = await groups.get(groupId);
   state.competitions = state.group.competitions ?? [];
-  state.activeComp = state.competitions[0]?.id ?? null;
+  state.activeComp = await pickCompetitionWithMatches(groupId, state.competitions);
   localStorage.setItem('matchday_group', groupId);
   if (notificationsEnabled()) {
     startMatchReminders(state, goToMatches);
@@ -746,7 +759,10 @@ async function renderMatches(el) {
     ]);
 
     if (!matchList.length) {
-      el.innerHTML = `<div class="section-card"><div class="empty-state">Aucun match pour ce championnat.<br>La sync BSD se fait toutes les 6h.</div></div>`;
+      const comp = state.competitions.find(c => c.id === state.activeComp);
+      const compLabel = comp?.nom ?? 'ce championnat';
+      const others = state.competitions.filter(c => c.id !== state.activeComp).map(c => c.nom).join(', ');
+      el.innerHTML = `<div class="section-card"><div class="empty-state">Aucun match à pronostiquer pour <strong>${compLabel}</strong> pour l'instant.${others ? `<br>Essaie un autre championnat ci-dessus (${others}).` : ''}<br><small style="opacity:0.75">Sur BSD, seuls certains calendriers 2026-2027 sont déjà publiés (ex. Premier League).</small></div></div>`;
       return;
     }
 

@@ -23,10 +23,14 @@ router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, r
              FROM matches m JOIN competitions c ON c.id = m.competition_id
              WHERE m.competition_id IN (${placeholders})
                AND (
-                 m.season = c.saison_active
-                 OR (m.kickoff_at >= datetime('now') AND m.status NOT IN ('finished', 'FT', 'ended'))
+                 (m.kickoff_at >= datetime('now') AND m.status NOT IN ('finished', 'FT', 'ended'))
+                 OR m.status IN ('live', 'inprogress')
+                 OR EXISTS (
+                   SELECT 1 FROM predictions p
+                   WHERE p.match_id = m.id AND p.group_id = ? AND p.user_id = ?
+                 )
                )`;
-  const params = [...compIds];
+  const params = [...compIds, req.groupId, req.user.id];
 
   if (competitionId) { sql += ' AND m.competition_id = ?'; params.push(Number(competitionId)); }
   if (matchday) { sql += ' AND m.matchday = ?'; params.push(Number(matchday)); }
