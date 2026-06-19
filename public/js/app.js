@@ -366,7 +366,7 @@ function headerHtml() {
 
   return `<div class="header">
     <div class="header-left">
-      <div class="logo-blob">⚽</div>
+      <div class="logo-blob"><img src="/icons/icon-192.png?v=2" alt="" class="header-app-icon"></div>
       <div class="header-brand">
         <div class="title">Matchday</div>
         <button type="button" class="group-tag" id="switch-group">
@@ -525,7 +525,7 @@ function resolveBsdTeamId(match, side, logoMap) {
 
 function navHtml() {
   const items = [
-    { id: 'matches', icon: '📋', label: 'Matchs' },
+    { id: 'matches', image: '/icons/nav-matches.png?v=1', label: 'Matchs' },
     { id: 'championships', icon: '🏆', label: 'Championnats' },
     { id: 'standings', icon: '📊', label: 'Classement' },
     { id: 'chat', icon: '💬', label: 'Chat' },
@@ -534,7 +534,9 @@ function navHtml() {
   ];
   return `<div class="bottom-nav">${items.map(i =>
     `<button class="nav-item ${state.screen === i.id ? 'active' : ''}" data-nav="${i.id}">
-      <div>${i.icon}</div>${i.label}
+      <div>${i.image
+        ? `<img src="${i.image}" alt="" class="nav-icon-img" width="24" height="24">`
+        : i.icon}</div>${i.label}
     </button>`).join('')}</div>`;
 }
 
