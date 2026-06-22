@@ -226,8 +226,10 @@ for (const r of result.results) {
 }
 
 if (!keep) {
+  console.log('\n⏳ Match test conservé 3 min pour tester le clic sur la notif...');
+  await new Promise(r => setTimeout(r, 180000));
   await cleanupTestReminderMatch();
-  console.log('\n🧹 Match test supprimé (ajoute --keep pour le garder)');
+  console.log('🧹 Match test supprimé (ajoute --keep pour le garder plus longtemps)');
 } else {
   console.log(`\n📌 Match test conservé (#${seeded.matchId}) — pronostique ou supprime-le manuellement`);
 }

@@ -1,4 +1,4 @@
-const CACHE = 'matchday-v9';
+const CACHE = 'matchday-v10';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

@@ -122,17 +122,18 @@ export const chat = {
     api(`/groups/${groupId}/chat/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) }),
 };
 
-export function showToast(msg) {
+export function showToast(msg, type = 'default') {
   let el = document.getElementById('toast');
   if (!el) {
     el = document.createElement('div');
     el.id = 'toast';
-    el.className = 'toast';
     document.body.appendChild(el);
   }
   el.textContent = msg;
+  el.className = `toast toast-${type}`;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2500);
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
 export function compColors(code) {

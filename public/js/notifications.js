@@ -1,6 +1,6 @@
 import { api, showToast } from './api.js';
 
-const SW_URL = '/sw.js?v=9';
+const SW_URL = '/sw.js?v=10';
 const PENDING_NAV_KEY = 'matchday_pending_nav';
 
 let navHandler = null;
@@ -59,6 +59,15 @@ export function consumePendingNav() {
   }
 }
 
+export function navigateToMatchDeepLink(payload) {
+  stashPendingNav(payload);
+  const nav = parseNavFromPayload(payload);
+  const path = payload?.url || (nav?.matchId
+    ? `/?screen=matches&group=${nav.groupId || ''}&match=${nav.matchId}${nav.competitionId ? `&comp=${nav.competitionId}` : ''}`
+    : '/?screen=matches');
+  window.location.assign(path.startsWith('/') ? path : `/${path}`);
+}
+
 export function registerPushHandlers({ onNav, onPush }) {
   navHandler = onNav;
   pushHandler = onPush;
@@ -67,6 +76,10 @@ export function registerPushHandlers({ onNav, onPush }) {
 function handleServiceWorkerMessage(event) {
   const { type, payload } = event.data ?? {};
   if (type === 'MATCHDAY_NAV') {
+    if (parseNavFromPayload(payload)?.matchId) {
+      navigateToMatchDeepLink(payload);
+      return;
+    }
     stashPendingNav(payload);
     if (navHandler) {
       navHandler(payload);

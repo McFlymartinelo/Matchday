@@ -6,7 +6,7 @@ import { renderProfile } from './profile.js';
 import { renderChampionships } from './championships.js';
 import { renderSeasonXi } from './seasonXi.js';
 import { renderStandingsScreen, compPillsHtml } from './standingsUi.js';
-import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers } from './notifications.js';
+import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers, navigateToMatchDeepLink } from './notifications.js';
 import { startMatchReminders, stopMatchReminders, handlePushPayload } from './reminders.js';
 
 const state = {
@@ -44,7 +44,7 @@ export async function init() {
     if (pendingNav) await applyPendingNav(pendingNav);
     else await handleNotificationDeepLink();
     await syncPushIfEnabled();
-    startMatchReminders(state, goToMatch);
+    startMatchReminders(state, openMatchFromNotif);
     renderApp();
   } catch (err) {
     auth.logout();
@@ -74,7 +74,7 @@ async function loadGroup(groupId) {
   state.activeComp = await pickCompetitionWithMatches(groupId, state.competitions);
   localStorage.setItem('matchday_group', groupId);
   if (notificationsEnabled()) {
-    startMatchReminders(state, goToMatch);
+    startMatchReminders(state, openMatchFromNotif);
   }
 }
 
@@ -135,11 +135,47 @@ async function handleNotificationDeepLink() {
 
 function scrollToMatchCard(matchId) {
   const card = document.querySelector(`.match-card[data-match="${matchId}"]`);
-  if (!card) return;
+  if (!card) return false;
   card.classList.add('match-card-highlight');
   card.scrollIntoView({ behavior: 'smooth', block: 'center' });
   card.querySelector('input[data-side="home"]')?.focus({ preventScroll: true });
   setTimeout(() => card.classList.remove('match-card-highlight'), 5000);
+  return true;
+}
+
+async function ensureMatchVisible(matchId) {
+  if (!matchId || !state.group?.id) return false;
+
+  let list = await matches.list(state.group.id, state.activeComp ? { competitionId: state.activeComp } : {});
+  if (list.some(m => m.id === matchId)) return true;
+
+  const all = await matches.list(state.group.id, {});
+  const found = all.find(m => m.id === matchId);
+  if (!found) return false;
+
+  state.activeComp = found.competition_id;
+  return true;
+}
+
+async function focusMatchAfterRender(matchId, attempt = 0) {
+  if (!matchId) return;
+  if (scrollToMatchCard(matchId)) return;
+
+  if (attempt >= 4) {
+    showToast('Match introuvable — calendrier peut-être expiré', 'error');
+    return;
+  }
+
+  if (attempt === 1) {
+    const ok = await ensureMatchVisible(matchId);
+    if (ok) {
+      state.scrollToMatchId = matchId;
+      await renderApp();
+      return;
+    }
+  }
+
+  setTimeout(() => focusMatchAfterRender(matchId, attempt + 1), 200);
 }
 
 function setAuthPage(on) {
@@ -498,7 +534,7 @@ function attachHeaderEvents() {
     openNotificationPanel(btn, {
       onEnabled: () => {
         btn.classList.add('active');
-        startMatchReminders(state, goToMatch);
+        startMatchReminders(state, openMatchFromNotif);
         renderApp();
       },
       onDisabled: () => {
@@ -792,6 +828,9 @@ async function renderApp() {
 async function renderMatches(el) {
   el.innerHTML = '<div class="empty-state">Chargement…</div>';
   try {
+    const pendingScrollId = state.scrollToMatchId;
+    if (pendingScrollId) await ensureMatchVisible(pendingScrollId);
+
     const params = state.activeComp ? { competitionId: state.activeComp } : {};
     const [matchList, logoMap] = await Promise.all([
       matches.list(state.group.id, params),
@@ -856,7 +895,7 @@ async function renderMatches(el) {
     if (state.scrollToMatchId) {
       const id = state.scrollToMatchId;
       state.scrollToMatchId = null;
-      setTimeout(() => scrollToMatchCard(id), 150);
+      focusMatchAfterRender(id);
     } else {
       const firstOpen = el.querySelector('.matchday-section.matchday-open');
       firstOpen?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -913,19 +952,25 @@ async function onScoreChange(e) {
   if (home === '' || away === '') return;
   try {
     await matches.predict(state.group.id, { matchId, homeScore: Number(home), awayScore: Number(away) });
-    showToast('Pronostic enregistré ✓');
+    showToast('Pronostic enregistré ✓', 'success');
     renderApp();
   } catch (err) {
-    showToast(err.message);
+    showToast(err.message, 'error');
   }
 }
 
+function openMatchFromNotif(nav) {
+  if (parseNavFromPayload(nav)?.matchId) {
+    navigateToMatchDeepLink(nav);
+    return;
+  }
+  goToMatch(nav);
+}
+
 registerPushHandlers({
-  onNav: (payload) => {
-    if (state.user && state.group) goToMatch(payload);
-  },
+  onNav: openMatchFromNotif,
   onPush: (payload) => {
-    if (state.user && state.group) handlePushPayload(payload, state, goToMatch);
+    if (state.user && state.group) handlePushPayload(payload, state, openMatchFromNotif);
   },
 });
 
