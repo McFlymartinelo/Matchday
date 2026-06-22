@@ -1292,3 +1292,87 @@ html[data-theme="dark"] .toast-default {
 .pcs.miss span { color: var(--ink-soft); opacity: .6; }
 .player-card-footer { font-size: 10px; color: var(--ink-soft); font-weight: 600; line-height: 1.3; }
 .standings-comp-block { margin-bottom: 12px; }
+
+/* Classement — nouveau layout */
+.standings-row {
+  display: flex; align-items: center; padding: 10px 8px; border-radius: 14px; gap: 10px; margin-bottom: 4px;
+}
+.standings-row.me { background: var(--l1-bg); }
+.standings-rank {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; background: var(--border-soft); color: var(--ink-soft); flex-shrink: 0;
+}
+.standings-player { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.standings-player-text { min-width: 0; }
+.standings-name { display: block; font-size: 13px; font-weight: 700; color: var(--ink); }
+.standings-sub { display: block; font-size: 10px; color: var(--ink-soft); font-weight: 600; margin-top: 2px; }
+.standings-pts {
+  font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 18px; color: var(--ink); line-height: 1;
+}
+.standings-pts span { font-size: 11px; font-weight: 700; color: var(--ink-soft); margin-left: 2px; }
+
+.standings-comp-pills {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+}
+.standings-comp-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 8px 12px; border-radius: 999px; border: 1.5px solid var(--border-soft);
+  background: var(--card-soft); color: var(--ink-soft); font-size: 12px; font-weight: 800;
+  cursor: pointer; font-family: inherit;
+}
+.standings-comp-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px; border-radius: 16px; border: 2px solid; margin-bottom: 16px;
+}
+.standings-comp-title { font-family: 'Baloo 2', sans-serif; font-size: 18px; font-weight: 700; color: var(--ink); }
+.standings-comp-sub { font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-top: 2px; }
+
+.standings-podium {
+  display: flex; align-items: flex-end; justify-content: center; gap: 8px;
+  margin: 8px 0 18px; min-height: 140px;
+}
+.podium-slot {
+  flex: 1; max-width: 110px; display: flex; flex-direction: column; align-items: center;
+  gap: 6px; padding: 12px 8px 10px; border-radius: 16px 16px 12px 12px;
+  background: var(--card-soft); border: 1.5px solid var(--border-soft);
+}
+.podium-slot.me { box-shadow: 0 0 0 2px var(--podium-accent, var(--l1)); }
+.podium-1 { min-height: 130px; background: color-mix(in srgb, var(--podium-bg, var(--l1-bg)) 70%, var(--card)); border-color: var(--podium-accent, var(--l1)); }
+.podium-2 { min-height: 108px; }
+.podium-3 { min-height: 92px; }
+.podium-empty { visibility: hidden; }
+.podium-medal { font-size: 22px; line-height: 1; }
+.podium-name { font-size: 12px; font-weight: 800; color: var(--ink); text-align: center; }
+.podium-pts { font-family: 'Baloo 2', sans-serif; font-size: 15px; font-weight: 700; color: var(--podium-accent, var(--l1)); }
+
+.standings-rest { margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
+
+.stats-chart-hint {
+  font-size: 12px; line-height: 1.45; color: var(--ink-soft); font-weight: 600;
+  margin: -4px 0 14px;
+}
+.stats-chart-hint strong { color: var(--ink); font-weight: 700; }
+
+.md-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; }
+.md-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  font-size: 12px; min-width: 280px;
+}
+.md-table th, .md-table td {
+  padding: 10px 8px; text-align: center; border-bottom: 1px solid var(--border-soft);
+}
+.md-table thead th { font-weight: 800; color: var(--ink-soft); background: var(--card-soft); }
+.md-cell-label {
+  text-align: left !important; font-weight: 800; color: var(--ink); white-space: nowrap;
+  position: sticky; left: 0; background: var(--card); z-index: 1;
+}
+.md-table-player {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 56px;
+}
+.md-table-player span { font-size: 10px; font-weight: 700; color: var(--ink-soft); }
+.md-cell { font-family: 'Baloo 2', sans-serif; font-size: 15px; font-weight: 700; color: var(--ink-soft); }
+.md-cell-positive { color: var(--l1); background: color-mix(in srgb, var(--l1-bg) 50%, transparent); }
+.md-cell-zero { opacity: 0.45; }
+html[data-theme="dark"] .md-cell-label { background: var(--card); }
+html[data-theme="dark"] .podium-1 { background: color-mix(in srgb, var(--podium-bg, var(--l1-bg)) 35%, var(--card-soft)); }

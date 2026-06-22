@@ -17,6 +17,7 @@ const state = {
   activeComp: null,
   screen: 'matches',
   standingsTab: 'general',
+  standingsCompId: null,
   scrollToMatchId: null,
 };
 

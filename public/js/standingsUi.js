@@ -1,7 +1,7 @@
-import { standings, compColors, compLogoHtml, showToast } from './api.js';
+import { standings, compColors, compLogoHtml } from './api.js';
 import { renderAvatarHtml } from './avatars.js';
 
-function rankingRowsHtml(rows, currentUserId) {
+function rankingRowsHtml(rows, currentUserId, { compact = false } = {}) {
   return rows.map((r, i) => {
     const isMe = r.userId === currentUserId;
     const medal = i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1;
@@ -9,14 +9,48 @@ function rankingRowsHtml(rows, currentUserId) {
       r.xiPoints ? `11 : +${r.xiPoints}` : '',
       r.specialPoints ? `Vainqueur : +${r.specialPoints}` : '',
     ].filter(Boolean).join(' · ');
-    return `<div class="row ${isMe ? 'me' : ''}">
-      <div class="medal">${medal}</div>
-      <div class="name">${r.displayName}
-        ${extras ? `<div class="sub-pts">${extras}</div>` : ''}
+    return `<div class="standings-row ${isMe ? 'me' : ''} ${compact ? 'standings-row-compact' : ''}">
+      <div class="standings-rank">${medal}</div>
+      <div class="standings-player">
+        ${renderAvatarHtml(r.avatar, r.displayName, r.profileColor, 'sm')}
+        <div class="standings-player-text">
+          <span class="standings-name">${r.displayName}</span>
+          ${extras ? `<span class="standings-sub">${extras}</span>` : ''}
+        </div>
       </div>
-      <div class="pts">${r.totalPoints} pts</div>
+      <div class="standings-pts">${r.totalPoints}<span>pts</span></div>
     </div>`;
   }).join('');
+}
+
+function podiumHtml(rows, currentUserId, cc) {
+  const top = rows.slice(0, 3);
+  if (!top.length) return '';
+  const order = top.length >= 3 ? [top[1], top[0], top[2]] : top.length === 2 ? [top[1], top[0], null] : [null, top[0], null];
+
+  const slot = (r, place) => {
+    if (!r) return `<div class="podium-slot podium-empty podium-${place}"></div>`;
+    const isMe = r.userId === currentUserId;
+    return `<div class="podium-slot podium-${place} ${isMe ? 'me' : ''}" style="--podium-accent:${cc.color};--podium-bg:${cc.bg}">
+      <div class="podium-medal">${place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'}</div>
+      ${renderAvatarHtml(r.avatar, r.displayName, r.profileColor, 'sm')}
+      <div class="podium-name">${r.displayName.split(' ')[0]}</div>
+      <div class="podium-pts">${r.totalPoints} pts</div>
+    </div>`;
+  };
+
+  return `<div class="standings-podium">${slot(order[0], 2)}${slot(order[1], 1)}${slot(order[2], 3)}</div>`;
+}
+
+function compStandingsPills(comps, selectedId, groupId) {
+  return `<div class="standings-comp-pills">${comps.map(c => {
+    const active = c.id === selectedId ? 'active' : '';
+    const cc = compColors(c.code);
+    const style = c.id === selectedId ? `background:${cc.color};color:white;border-color:${cc.color}` : '';
+    return `<button type="button" class="standings-comp-pill ${active}" data-standings-comp="${c.id}" style="${style}">
+      ${compLogoHtml(c, 'comp-pill-logo')} ${c.code}
+    </button>`;
+  }).join('')}</div>`;
 }
 
 function avgChartHtml(members) {
@@ -24,6 +58,7 @@ function avgChartHtml(members) {
   const max = Math.max(...members.map(m => m.avgPerMatch), 0.1);
   return `<div class="stats-chart">
     <div class="stats-chart-title">Moyenne de points par match</div>
+    <p class="stats-chart-hint">Points de pronostic ÷ nombre de matchs terminés pronostiqués.</p>
     <div class="stats-bars">${members.map(m => {
       const h = Math.round((m.avgPerMatch / max) * 100);
       return `<div class="stats-bar-col">
@@ -36,12 +71,12 @@ function avgChartHtml(members) {
 }
 
 function evolutionHtml(evolution, members, currentUserId) {
-  if (!evolution.length) return '';
+  if (!evolution.length) return '<div class="empty-state">Pas encore de journée terminée</div>';
   const last = evolution[evolution.length - 1];
   return `<div class="stats-evolution">
-    <div class="stats-chart-title">Évolution du classement (dernière journée : ${last.label})</div>
+    <div class="stats-chart-title">Classement cumulé après la dernière journée</div>
+    <p class="stats-chart-hint">Position générale après <strong>${last.label}</strong> (tous championnats).</p>
     <div class="evo-rows">${last.rankings.map(r => {
-      const m = members.find(x => x.userId === r.userId);
       const isMe = r.userId === currentUserId;
       return `<div class="evo-row ${isMe ? 'me' : ''}">
         <span class="evo-rank">#${r.rank}</span>
@@ -53,25 +88,54 @@ function evolutionHtml(evolution, members, currentUserId) {
 }
 
 function matchdayPointsHtml(pointsByMatchday, members) {
-  if (!pointsByMatchday.length) return '';
+  if (!pointsByMatchday.length) {
+    return '<div class="empty-state">Aucune journée terminée pour l\'instant</div>';
+  }
   const recent = pointsByMatchday.slice(-5);
+
+  const headerCells = members.map(m =>
+    `<th class="md-table-player ${m.userId === members[0]?.userId ? '' : ''}" title="${m.displayName}">
+      ${renderAvatarHtml(m.avatar, m.displayName, m.profileColor, 'sm')}
+      <span>${m.displayName.split(' ')[0]}</span>
+    </th>`
+  ).join('');
+
+  const bodyRows = recent.map(round => {
+    const cells = members.map(m => {
+      const pts = round.points[m.userId] ?? 0;
+      const cls = pts > 0 ? 'md-cell-positive' : pts === 0 ? 'md-cell-zero' : '';
+      return `<td class="md-cell ${cls}">${pts > 0 ? `+${pts}` : '0'}</td>`;
+    }).join('');
+    return `<tr>
+      <th class="md-cell-label">${round.label}</th>
+      ${cells}
+    </tr>`;
+  }).join('');
+
   return `<div class="stats-matchdays">
-    <div class="stats-chart-title">Points par journée (5 dernières)</div>
-    ${recent.map(round => `
-      <div class="md-round">
-        <div class="md-round-label">${round.label}</div>
-        <div class="md-round-scores">${members.map(m => {
-          const pts = round.points[m.userId] ?? 0;
-          return `<span class="md-score ${pts > 0 ? 'positive' : ''}">${m.displayName.split(' ')[0]}: ${pts}</span>`;
-        }).join('')}</div>
-      </div>
-    `).join('')}
+    <div class="stats-chart-title">Points marqués par journée</div>
+    <p class="stats-chart-hint">
+      Combien chaque joueur a <strong>gagné sur cette journée</strong> (pronos + Mon 11).
+      Ce n'est pas le classement total — seulement les points de la J.
+    </p>
+    <div class="md-table-wrap">
+      <table class="md-table">
+        <thead>
+          <tr>
+            <th class="md-cell-label">Journée</th>
+            ${headerCells}
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>
   </div>`;
 }
 
 function playerCardsHtml(members, currentUserId) {
   return `<div class="player-cards-section">
     <div class="stats-chart-title">Fiche joueur</div>
+    <p class="stats-chart-hint">Récap de la saison : types de pronos réussis et précision globale.</p>
     <div class="player-cards">${members.map(m => {
       const isMe = m.userId === currentUserId;
       return `<div class="player-card ${isMe ? 'me' : ''}">
@@ -96,6 +160,42 @@ function playerCardsHtml(members, currentUserId) {
   </div>`;
 }
 
+async function renderByCompTab(body, state) {
+  const comps = state.competitions;
+  if (!comps.length) {
+    body.innerHTML = '<div class="empty-state">Aucun championnat suivi</div>';
+    return;
+  }
+
+  if (!state.standingsCompId || !comps.find(c => c.id === state.standingsCompId)) {
+    state.standingsCompId = comps[0].id;
+  }
+
+  const selected = comps.find(c => c.id === state.standingsCompId) ?? comps[0];
+  const cc = compColors(selected.code);
+  const rows = await standings.general(state.group.id, selected.id);
+
+  body.innerHTML = `<div class="section-card standings-by-comp">
+    ${compStandingsPills(comps, selected.id)}
+    <div class="standings-comp-header" style="border-color:${cc.color};background:${cc.bg}">
+      ${compLogoHtml(selected, 'comp-head-logo')}
+      <div>
+        <div class="standings-comp-title">${selected.nom}</div>
+        <div class="standings-comp-sub">Classement pronos · Mon 11 · vainqueur</div>
+      </div>
+    </div>
+    ${rows.length ? podiumHtml(rows, state.user.id, cc) : '<div class="empty-state">Aucun point sur ce championnat</div>'}
+    ${rows.length > 3 ? `<div class="standings-rest">${rankingRowsHtml(rows.slice(3), state.user.id)}</div>` : ''}
+  </div>`;
+
+  body.querySelectorAll('[data-standings-comp]').forEach(btn => {
+    btn.onclick = () => {
+      state.standingsCompId = Number(btn.dataset.standingsComp);
+      renderByCompTab(body, state);
+    };
+  });
+}
+
 export async function renderStandingsScreen(el, state) {
   el.innerHTML = `<div class="tabs">
     <button class="tab ${state.standingsTab === 'general' ? 'active' : ''}" data-tab="general">Général</button>
@@ -115,27 +215,12 @@ export async function renderStandingsScreen(el, state) {
       const rows = await standings.general(state.group.id);
       body.innerHTML = `<div class="section-card standings-card">
         <div class="section-head"><div class="jn">Classement général</div></div>
-        <p class="profile-desc">Tous championnats confondus · pronos + Mon 11 + vainqueurs</p>
-        ${rows.length ? rankingRowsHtml(rows, state.user.id) : '<div class="empty-state">Aucun point pour l\'instant</div>'}
+        <p class="profile-desc">Tous championnats · pronos + Mon 11 + vainqueurs</p>
+        ${rows.length ? podiumHtml(rows, state.user.id, compColors('PL')) : ''}
+        ${rows.length > 3 ? rankingRowsHtml(rows.slice(3), state.user.id) : rows.length ? rankingRowsHtml(rows, state.user.id) : '<div class="empty-state">Aucun point pour l\'instant</div>'}
       </div>`;
     } else if (state.standingsTab === 'byComp') {
-      const comps = state.competitions;
-      if (!comps.length) {
-        body.innerHTML = '<div class="empty-state">Aucun championnat suivi</div>';
-        return;
-      }
-      const blocks = await Promise.all(comps.map(async (c) => {
-        const rows = await standings.general(state.group.id, c.id);
-        const cc = compColors(c.code);
-        return `<div class="section-card standings-comp-block">
-          <div class="section-head comp-head-row">
-            ${compLogoHtml(c, 'comp-head-logo')}
-            <div class="jn">${c.nom}</div>
-          </div>
-          ${rows.length ? rankingRowsHtml(rows, state.user.id) : '<div class="empty-state">Aucun point</div>'}
-        </div>`;
-      }));
-      body.innerHTML = blocks.join('');
+      await renderByCompTab(body, state);
     } else if (state.standingsTab === 'stats') {
       const data = await standings.analytics(state.group.id);
       body.innerHTML = `
