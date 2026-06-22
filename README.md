@@ -38,6 +38,35 @@ Ouvrir http://localhost:3000
 npm test
 ```
 
+### Tester les notifications (rappel 1h avant match)
+
+1. Génère les clés VAPID si besoin : `npm run vapid:keys` → copie dans `.env`
+2. Lance l'app, connecte-toi, active la cloche 🔔 (abonnement push)
+3. Simulation (sans envoi) :
+
+```bash
+npm run test:notifications -- --list
+npm run test:notifications -- --username marty
+```
+
+4. Envoi réel :
+
+```bash
+npm run test:notifications -- --send --username marty --group 1
+```
+
+Le script crée un match fictif (PSG–OM) dans ~60 min sans pronostic, envoie le push, puis supprime le match (ajoute `--keep` pour le garder).
+
+En prod (admin connecté), même chose via API :
+
+```http
+POST /api/admin/notifications/simulate-reminder
+Authorization: Bearer <token admin>
+Content-Type: application/json
+
+{ "username": "marty", "groupId": 1, "send": true }
+```
+
 ## Fonctionnalités
 
 - Groupes privés avec sélection des championnats (Ligue 1, PL, Liga, Serie A, Bundesliga)
