@@ -1,4 +1,4 @@
-import { auth, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials } from './api.js';
+import { auth, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName } from './api.js';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
@@ -674,28 +674,6 @@ async function openGroupSwitcher(prefillCode = '') {
 
 function closeGroupSwitcher() {
   document.getElementById('group-modal')?.classList.add('hidden');
-}
-
-function normTeamName(name) {
-  return (name ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-async function buildTeamLogoMap(groupId) {
-  const map = new Map();
-  try {
-    const clubs = await groups.clubs(groupId);
-    for (const t of clubs) {
-      map.set(normTeamName(t.team_name), t.team_id);
-      if (t.short_name) map.set(normTeamName(t.short_name), t.team_id);
-    }
-  } catch { /* ignore */ }
-  return map;
 }
 
 function resolveBsdTeamId(match, side, logoMap) {

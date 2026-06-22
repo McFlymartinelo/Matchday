@@ -32,7 +32,13 @@ export async function getGroupTeamMap(groupId) {
   const map = new Map();
   for (const c of comps) {
     try {
-      const standingTeams = await bsd.getStandingTeams(c.bsd_league_id);
+      let standingTeams = await bsd.getStandingTeams(c.bsd_league_id);
+      if (!standingTeams?.length) {
+        const data = await bsd.getTeams({ league_id: c.bsd_league_id, limit: 200 });
+        standingTeams = bsd.extractResults(data)
+          .map(t => ({ team_id: t.id, team_name: t.name }))
+          .filter(t => t.team_id && t.team_name);
+      }
       if (!standingTeams?.length) continue;
 
       const shortNames = await loadShortNames(c.bsd_league_id);

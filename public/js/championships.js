@@ -1,6 +1,6 @@
-import { standings, teamCrest, compColors, compLogoHtml, showToast } from './api.js';
+import { standings, teamCrest, compColors, compLogoHtml, showToast, buildTeamLogoMap, normTeamName } from './api.js';
 
-function renderLeagueTable(comp, rows) {
+function renderLeagueTable(comp, rows, logoMap) {
   const cc = compColors(comp.code);
   const total = rows.length;
   const relegateFrom = Math.max(total - 2, 1);
@@ -35,10 +35,11 @@ function renderLeagueTable(comp, rows) {
       const gdStr = gd > 0 ? `+${gd}` : String(gd);
       const isLeader = r.position === 1;
       const isRelegation = r.position >= relegateFrom && total >= 5;
+      const teamId = r.team_id ?? logoMap.get(normTeamName(r.team_name));
       return `<div class="league-row ${isLeader ? 'leader' : ''} ${isRelegation ? 'relegation' : ''}">
         <span class="league-pos">${r.position}</span>
         <span class="league-team">
-          ${teamCrest(r.team_name, comp.code)}
+          ${teamCrest(r.team_name, comp.code, teamId)}
           <span class="league-team-name" title="${r.team_name}">${r.team_name}</span>
         </span>
         <span class="league-stat">${r.played ?? 0}</span>
@@ -57,7 +58,10 @@ export async function renderChampionships(el, state) {
   el.innerHTML = '<div class="empty-state">Chargement des classements…</div>';
 
   try {
-    const data = await standings.allOfficial(state.group.id);
+    const [data, logoMap] = await Promise.all([
+      standings.allOfficial(state.group.id),
+      buildTeamLogoMap(state.group.id),
+    ]);
     const activeId = state.activeComp ?? state.competitions[0]?.id;
     const filtered = activeId
       ? data.filter(d => d.competition.id === activeId)
@@ -75,7 +79,7 @@ export async function renderChampionships(el, state) {
         </div>
         <p class="profile-desc" style="margin-top:8px;margin-bottom:0">Tableaux en direct des championnats suivis par ton groupe.</p>
       </div>
-      ${(filtered.length ? filtered : data).map(d => renderLeagueTable(d.competition, d.rows)).join('')}
+      ${(filtered.length ? filtered : data).map(d => renderLeagueTable(d.competition, d.rows, logoMap)).join('')}
     `;
   } catch (err) {
     el.innerHTML = `<div class="section-card"><div class="empty-state">${err.message}</div></div>`;

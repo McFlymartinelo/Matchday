@@ -152,7 +152,24 @@ export async function syncStandings(competitionId, bsdLeagueId) {
          ) ORDER BY team_name`,
         [competitionId, seasonLabel, competitionId, seasonLabel]
       );
-      rows = teams.map((t, i) => ({ position: i + 1, team_name: t.team_name, played: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0, points: 0 }));
+      const idRows = await all(
+        `SELECT home_team_name AS team_name, home_bsd_team_id AS team_id FROM matches
+         WHERE competition_id = ? AND season = ? AND home_bsd_team_id IS NOT NULL
+         UNION ALL
+         SELECT away_team_name, away_bsd_team_id FROM matches
+         WHERE competition_id = ? AND season = ? AND away_bsd_team_id IS NOT NULL`,
+        [competitionId, seasonLabel, competitionId, seasonLabel]
+      );
+      const idMap = new Map();
+      for (const r of idRows) {
+        idMap.set(bsd.normalizeTeamName(r.team_name), r.team_id);
+      }
+      rows = teams.map((t, i) => ({
+        position: i + 1,
+        team_name: t.team_name,
+        team_id: idMap.get(bsd.normalizeTeamName(t.team_name)) ?? null,
+        played: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0, points: 0,
+      }));
     }
 
     await run('DELETE FROM official_standings WHERE competition_id = ? AND season = ?', [competitionId, seasonLabel]);
@@ -160,14 +177,15 @@ export async function syncStandings(competitionId, bsdLeagueId) {
     for (const row of rows) {
       const teamName = row.team?.name ?? row.team_name ?? row.name;
       if (!teamName) continue;
+      const teamId = row.team_id ?? row.team?.id ?? null;
       await run(
-        `INSERT INTO official_standings (competition_id, season, position, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at)
+        `INSERT INTO official_standings (competition_id, season, position, team_id, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(competition_id, season, team_name) DO UPDATE SET
-           position = excluded.position, played = excluded.played, won = excluded.won,
+           team_id = excluded.team_id, position = excluded.position, played = excluded.played, won = excluded.won,
            drawn = excluded.drawn, lost = excluded.lost, goals_for = excluded.goals_for,
            goals_against = excluded.goals_against, points = excluded.points, updated_at = datetime('now')`,
-        [competitionId, seasonLabel, row.position ?? row.rank, teamName,
+        [competitionId, seasonLabel, row.position ?? row.rank, teamId, teamName,
          row.played ?? row.all?.played ?? 0, row.won ?? row.all?.win ?? 0,
          row.drawn ?? row.all?.draw ?? 0, row.lost ?? row.all?.lose ?? 0,
          row.goals_for ?? row.all?.goals?.for ?? 0, row.goals_against ?? row.all?.goals?.against ?? 0,

@@ -148,7 +148,7 @@ router.get('/:groupId/standings/official', authRequired, groupMemberRequired, as
   for (const c of comps) {
     const season = c.saison_active ?? '2025-2026';
     let rows = await all(
-      'SELECT position, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
+      'SELECT position, team_id, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
       [c.id, season]
     );
     rows = dedupeStandingsRows(rows);

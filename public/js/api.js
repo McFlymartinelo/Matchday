@@ -155,6 +155,28 @@ export function compLogoHtml(comp, className = 'comp-logo') {
   return comp?.emoji ?? '';
 }
 
+export function normTeamName(name) {
+  return (name ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export async function buildTeamLogoMap(groupId) {
+  const map = new Map();
+  try {
+    const clubs = await groups.clubs(groupId);
+    for (const t of clubs) {
+      map.set(normTeamName(t.team_name), t.team_id);
+      if (t.short_name) map.set(normTeamName(t.short_name), t.team_id);
+    }
+  } catch { /* ignore */ }
+  return map;
+}
+
 export function teamCrest(name, compCode, teamId = null) {
   const c = compColors(compCode);
   const letters = (name || '???').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || '???';
