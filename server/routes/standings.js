@@ -322,7 +322,49 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
     matchdayEvolution.push({ round: idx + 1, label, rankings: ranked });
   });
 
-  res.json({ members, matchdayEvolution, pointsByMatchday });
+  const groupComps = await all(
+    `SELECT c.id, c.code, c.nom FROM competitions c
+     JOIN group_competitions gc ON gc.competition_id = c.id
+     WHERE gc.group_id = ?
+     ORDER BY c.nom`,
+    [req.groupId]
+  );
+
+  const lastRoundByCompId = new Map();
+  for (const round of rounds) {
+    const prev = lastRoundByCompId.get(round.competition_id);
+    if (!prev || round.kickoff > prev.kickoff) {
+      lastRoundByCompId.set(round.competition_id, round);
+    }
+  }
+
+  const lastMatchdayByComp = groupComps.map(c => {
+    const round = lastRoundByCompId.get(c.id);
+    if (!round) {
+      return {
+        competitionId: c.id,
+        compCode: c.code,
+        compNom: c.nom,
+        matchday: null,
+        points: {},
+      };
+    }
+    const k = roundKey(round.competition_id, round.matchday);
+    const byUserPred = predLookup.get(k) ?? new Map();
+    const points = {};
+    for (const m of members) {
+      points[m.userId] = byUserPred.get(m.userId) ?? 0;
+    }
+    return {
+      competitionId: c.id,
+      compCode: round.comp_code,
+      compNom: round.comp_nom,
+      matchday: round.matchday,
+      points,
+    };
+  });
+
+  res.json({ members, matchdayEvolution, lastMatchdayByComp });
 });
 
 /** Bilan complet pour l'écran Profil */

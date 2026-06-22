@@ -87,50 +87,54 @@ function evolutionHtml(evolution, members, currentUserId) {
   </div>`;
 }
 
-function matchdayPointsHtml(pointsByMatchday, members) {
-  if (!pointsByMatchday.length) {
+function lastMatchdayGridHtml(lastMatchdayByComp, members, currentUserId) {
+  const comps = lastMatchdayByComp ?? [];
+  const withRound = comps.filter(c => c.matchday != null);
+  if (!withRound.length) {
     return '<div class="empty-state">Aucune journée terminée pour l\'instant</div>';
   }
-  const recent = pointsByMatchday.slice(-5);
 
-  const headerCells = members.map(m =>
-    `<th class="md-table-player ${m.userId === members[0]?.userId ? '' : ''}" title="${m.displayName}">
-      ${renderAvatarHtml(m.avatar, m.displayName, m.profileColor, 'sm')}
-      <span>${m.displayName.split(' ')[0]}</span>
-    </th>`
-  ).join('');
+  const headerCells = comps.map(c => {
+    if (c.matchday == null) {
+      return `<th class="md-comp-col md-comp-empty" title="${c.compNom}">
+        <span class="md-label-code">${c.compCode}</span>
+        <span class="md-label-md">—</span>
+      </th>`;
+    }
+    return `<th class="md-comp-col" title="${c.compNom} · Journée ${c.matchday}">
+      <span class="md-label-code">${c.compCode}</span>
+      <span class="md-label-md">J${c.matchday}</span>
+    </th>`;
+  }).join('');
 
-  const bodyRows = recent.map(round => {
-    const cells = members.map(m => {
-      const pts = round.points[m.userId] ?? 0;
-      const cls = pts > 0 ? 'md-cell-positive' : pts === 0 ? 'md-cell-zero' : '';
+  const bodyRows = members.map(m => {
+    const isMe = m.userId === currentUserId;
+    const cells = comps.map(c => {
+      if (c.matchday == null) return `<td class="md-cell md-cell-zero">—</td>`;
+      const pts = c.points[m.userId] ?? 0;
+      const cls = pts > 0 ? 'md-cell-positive' : 'md-cell-zero';
       return `<td class="md-cell ${cls}">${pts > 0 ? `+${pts}` : '0'}</td>`;
     }).join('');
-    const code = round.compCode ?? '';
-    const md = round.matchday ?? round.label?.replace(/^.*J/, '') ?? '?';
-    const nom = round.compNom ?? code;
-    return `<tr>
-      <th class="md-cell-label">
-        <span class="md-label-code">${code}</span>
-        <span class="md-label-name">${nom}</span>
-        <span class="md-label-md">Journée ${md}</span>
+    return `<tr class="md-player-row ${isMe ? 'me' : ''}">
+      <th class="md-player-col">
+        <span class="md-player-cell">${renderAvatarHtml(m.avatar, m.displayName, m.profileColor, 'sm')}
+        <span class="md-player-name">${m.displayName}</span></span>
       </th>
       ${cells}
     </tr>`;
   }).join('');
 
   return `<div class="stats-matchdays">
-    <div class="stats-chart-title">Points marqués par journée</div>
+    <div class="stats-chart-title">Dernière journée par championnat</div>
     <p class="stats-chart-hint">
-      Points de <strong>pronostic</strong> gagnés sur chaque journée terminée.
-      Les <strong>5 dernières journées</strong> de tous les championnats (tri par date).
-      Ex. deux lignes <strong>L1</strong> = J2 et J34 de Ligue 1, ce n'est pas un doublon.
+      Points de <strong>pronostic</strong> marqués par chaque joueur sur la
+      <strong>dernière journée terminée</strong> de chaque championnat suivi.
     </p>
     <div class="md-table-wrap">
-      <table class="md-table">
+      <table class="md-table md-table-players">
         <thead>
           <tr>
-            <th class="md-cell-label">Journée</th>
+            <th class="md-player-col">Joueur</th>
             ${headerCells}
           </tr>
         </thead>
@@ -234,7 +238,7 @@ export async function renderStandingsScreen(el, state) {
       body.innerHTML = `
         <div class="section-card">${avgChartHtml(data.members)}</div>
         <div class="section-card">${evolutionHtml(data.matchdayEvolution, data.members, state.user.id)}</div>
-        <div class="section-card">${matchdayPointsHtml(data.pointsByMatchday, data.members)}</div>
+        <div class="section-card">${lastMatchdayGridHtml(data.lastMatchdayByComp, data.members, state.user.id)}</div>
         <div class="section-card">${playerCardsHtml(data.members, state.user.id)}</div>
       `;
     }
