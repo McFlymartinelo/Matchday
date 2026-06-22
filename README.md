@@ -57,6 +57,18 @@ npm run test:notifications -- --send --username marty --group 1
 
 Le script crée un match fictif (PSG–OM) dans ~60 min sans pronostic, envoie le push, puis supprime le match (ajoute `--keep` pour le garder).
 
+### Promouvoir un admin application
+
+Par défaut, les comptes créés via l'inscription ne sont pas admin. Pour accéder aux routes `/api/admin/*` :
+
+```bash
+npm run admin:promote -- marty
+npm run admin:promote -- --list
+npm run admin:promote -- --revoke marty
+```
+
+En prod, configure `TURSO_DATABASE_URL` dans `.env` puis lance la même commande (elle cible la base Turso). Reconnecte-toi ensuite dans l'app.
+
 En prod (admin connecté), même chose via API :
 
 ```http

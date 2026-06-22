@@ -23,9 +23,16 @@ export function showReminderBanner(match, onGo) {
     </div>
   `;
 
+  const nav = {
+    matchId: match.id,
+    groupId: match.groupId ?? match.group_id,
+    competitionId: match.competition_id ?? match.competitionId,
+  };
+
   banner.querySelector('.reminder-go').onclick = () => {
     banner.remove();
-    onGo?.();
+    if (nav.matchId) onGo?.(nav);
+    else onGo?.();
   };
   banner.querySelector('.reminder-close').onclick = () => banner.remove();
 
@@ -57,7 +64,11 @@ export async function checkMatchReminders(state, onGo) {
     if (sessionStorage.getItem(key)) continue;
 
     sessionStorage.setItem(key, '1');
-    alertForMatch(m, onGo);
+    alertForMatch(m, () => onGo?.({
+      matchId: m.id,
+      groupId: state.group?.id,
+      competitionId: m.competition_id,
+    }));
     alerted.push(m);
   }
 
@@ -91,7 +102,35 @@ export function demoReminder(onGo) {
 
 export function handlePushPayload(payload, state, onGo) {
   showToast(`🔔 ${payload.body ?? payload.title ?? 'Notification'}`);
-  if (payload.url?.includes('matches') || payload.url === '/?screen=matches') {
+
+  let nav = null;
+  if (payload.matchId) {
+    nav = {
+      matchId: Number(payload.matchId),
+      groupId: payload.groupId ? Number(payload.groupId) : state.group?.id,
+      competitionId: payload.competitionId ? Number(payload.competitionId) : null,
+    };
+  } else if (payload.url) {
+    try {
+      const params = new URL(payload.url, window.location.origin).searchParams;
+      nav = {
+        matchId: params.get('match') ? Number(params.get('match')) : null,
+        groupId: params.get('group') ? Number(params.get('group')) : state.group?.id,
+        competitionId: params.get('comp') ? Number(params.get('comp')) : null,
+      };
+    } catch { /* ignore */ }
+  }
+
+  if (nav?.matchId) {
+    showReminderBanner({
+      id: nav.matchId,
+      groupId: nav.groupId,
+      competition_id: nav.competitionId,
+      home_team_name: payload.body?.split(' vs ')?.[0] ?? 'Match',
+      away_team_name: payload.body?.split(' vs ')?.[1]?.split(' dans')?.[0]?.trim() ?? '',
+      kickoff_at: new Date(Date.now() + 3600000).toISOString(),
+    }, onGo);
+  } else if (payload.url?.includes('matches') || payload.url === '/?screen=matches') {
     showReminderBanner({
       home_team_name: payload.body?.split(' vs ')?.[0] ?? 'Match',
       away_team_name: payload.body?.split(' vs ')?.[1]?.split(' dans')?.[0] ?? '',

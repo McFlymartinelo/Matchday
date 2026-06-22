@@ -70,7 +70,7 @@ router.post('/notifications/simulate-reminder', authRequired, adminRequired, asy
   const {
     userId,
     username,
-    groupId = 1,
+    groupId: groupIdRaw,
     minutes = 60,
     windowMinutes = 10,
     send = false,
@@ -97,7 +97,7 @@ router.post('/notifications/simulate-reminder', authRequired, adminRequired, asy
 
   const seeded = await seedTestReminderMatch({
     userId: targetUserId,
-    groupId: Number(groupId),
+    groupId: groupIdRaw ? Number(groupIdRaw) : null,
     minutes: Number(minutes),
     home,
     away,

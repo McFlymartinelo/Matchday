@@ -514,6 +514,15 @@ body.auth-page {
 /* Match cards */
 .match-card { background: var(--card-soft); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
 .match-card:last-child { margin-bottom: 0; }
+.match-card-highlight {
+  outline: 2px solid var(--accent, #6B3FD6);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #6B3FD6) 25%, transparent);
+  animation: match-highlight-pulse 1.2s ease-in-out 2;
+}
+@keyframes match-highlight-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.01); }
+}
 .match-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
 .team { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
 .team.right { justify-content: flex-end; text-align: right; }

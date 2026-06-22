@@ -19,11 +19,17 @@ describe('notifications — rappel pronostic 1h', () => {
   });
 
   it('détecte un match dans 60 min sans pronostic', async () => {
-    const user = await get('SELECT id FROM users LIMIT 1');
-    assert.ok(user, 'utilisateur test requis');
+    const fixture = await get(
+      `SELECT u.id AS user_id, gm.group_id
+       FROM users u
+       JOIN group_members gm ON gm.user_id = u.id
+       LIMIT 1`
+    );
+    assert.ok(fixture, 'utilisateur avec groupe requis');
 
     const seeded = await seedTestReminderMatch({
-      userId: user.id,
+      userId: fixture.user_id,
+      groupId: fixture.group_id,
       minutes: 60,
       bsdEventId: -888002,
       home: 'Test FC',
@@ -31,7 +37,7 @@ describe('notifications — rappel pronostic 1h', () => {
     });
 
     const targets = await findPendingReminderTargets({
-      userId: user.id,
+      userId: fixture.user_id,
       minutes: 60,
       windowMinutes: 10,
     });
@@ -41,9 +47,17 @@ describe('notifications — rappel pronostic 1h', () => {
   });
 
   it('ignore un match déjà pronostiqué', async () => {
-    const user = await get('SELECT id FROM users LIMIT 1');
+    const fixture = await get(
+      `SELECT u.id AS user_id, gm.group_id
+       FROM users u
+       JOIN group_members gm ON gm.user_id = u.id
+       LIMIT 1`
+    );
+    assert.ok(fixture, 'utilisateur avec groupe requis');
+
     const seeded = await seedTestReminderMatch({
-      userId: user.id,
+      userId: fixture.user_id,
+      groupId: fixture.group_id,
       minutes: 60,
       bsdEventId: -888002,
     });
@@ -51,11 +65,11 @@ describe('notifications — rappel pronostic 1h', () => {
     await run(
       `INSERT INTO predictions (user_id, group_id, match_id, home_score, away_score)
        VALUES (?, ?, ?, 1, 0)`,
-      [user.id, seeded.groupId, seeded.matchId]
+      [fixture.user_id, seeded.groupId, seeded.matchId]
     );
 
     const targets = await findPendingReminderTargets({
-      userId: user.id,
+      userId: fixture.user_id,
       minutes: 60,
       windowMinutes: 10,
       matchId: seeded.matchId,

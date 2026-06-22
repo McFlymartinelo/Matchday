@@ -42,7 +42,7 @@ export async function findPendingReminderTargets(options = {}) {
   const matchId = options.matchId ?? null;
 
   let sql = `
-    SELECT m.id AS match_id, m.home_team_name, m.away_team_name, m.kickoff_at,
+    SELECT m.id AS match_id, m.competition_id, m.home_team_name, m.away_team_name, m.kickoff_at,
            gm.user_id, g.id AS group_id, g.name AS group_name, c.nom AS comp_nom
     FROM matches m
     JOIN competitions c ON c.id = m.competition_id
@@ -140,18 +140,35 @@ export async function sendTestPush(userId) {
   });
 }
 
+export function buildMatchDeepLink({ group_id, match_id, competition_id, groupId, matchId, competitionId } = {}) {
+  const g = groupId ?? group_id;
+  const m = matchId ?? match_id;
+  const c = competitionId ?? competition_id;
+  const params = new URLSearchParams({ screen: 'matches', group: String(g), match: String(m) });
+  if (c) params.set('comp', String(c));
+  return `/?${params.toString()}`;
+}
+
+export function buildReminderPayload(target) {
+  const kickoff = new Date(target.kickoff_at);
+  const mins = Math.max(1, Math.round((kickoff - Date.now()) / 60000));
+  return {
+    title: '⏰ Pronostic à faire',
+    body: `${target.home_team_name} vs ${target.away_team_name} dans ${mins} min (${target.group_name})`,
+    url: buildMatchDeepLink(target),
+    matchId: target.match_id,
+    groupId: target.group_id,
+    competitionId: target.competition_id,
+    tag: `prono-${target.match_id}`,
+  };
+}
+
 export async function sendPredictionReminders(options = {}) {
   const targets = await findPendingReminderTargets(options);
   const results = [];
 
   for (const t of targets) {
-    const kickoff = new Date(t.kickoff_at);
-    const mins = Math.max(1, Math.round((kickoff - Date.now()) / 60000));
-    const payload = {
-      title: '⏰ Pronostic à faire',
-      body: `${t.home_team_name} vs ${t.away_team_name} dans ${mins} min (${t.group_name})`,
-      url: '/?screen=matches',
-    };
+    const payload = buildReminderPayload(t);
 
     if (options.dryRun) {
       results.push({ ...t, payload, dryRun: true });
@@ -169,16 +186,43 @@ export async function sendPredictionReminders(options = {}) {
   return { count: targets.length, results };
 }
 
+/** Premier groupe de l'utilisateur, ou vérifie l'appartenance si groupId fourni. */
+export async function resolveUserGroupId(userId, groupId = null) {
+  if (groupId) {
+    const row = await get(
+      `SELECT g.id, g.name FROM groups g
+       JOIN group_members gm ON gm.group_id = g.id
+       WHERE g.id = ? AND gm.user_id = ?`,
+      [groupId, userId]
+    );
+    if (!row) {
+      throw new Error(`Groupe ${groupId} introuvable ou l'utilisateur n'en est pas membre`);
+    }
+    return row;
+  }
+
+  const groups = await all(
+    `SELECT g.id, g.name FROM groups g
+     JOIN group_members gm ON gm.group_id = g.id
+     WHERE gm.user_id = ?
+     ORDER BY g.id ASC`,
+    [userId]
+  );
+  if (!groups.length) {
+    throw new Error('Aucun groupe pour cet utilisateur');
+  }
+  return groups[0];
+}
+
 /** Crée un match test (coup d'envoi dans N minutes) sans pronostic. */
 export async function seedTestReminderMatch(options = {}) {
   const minutes = options.minutes ?? 60;
   const userId = options.userId ?? 1;
-  const groupId = options.groupId ?? 1;
   const kickoff = new Date(Date.now() + minutes * 60000).toISOString();
   const bsdEventId = options.bsdEventId ?? -888001;
 
-  const group = await get('SELECT * FROM groups WHERE id = ?', [groupId]);
-  if (!group) throw new Error(`Groupe ${groupId} introuvable`);
+  const group = await resolveUserGroupId(userId, options.groupId ?? null);
+  const groupId = group.id;
 
   const comp = await get(
     `SELECT c.* FROM competitions c
@@ -212,7 +256,15 @@ export async function seedTestReminderMatch(options = {}) {
     [userId, groupId, matchId]
   );
 
-  return { matchId, kickoff, groupId, userId, home: options.home ?? 'Paris Saint-Germain', away: options.away ?? 'Olympique de Marseille' };
+  return {
+    matchId,
+    kickoff,
+    groupId,
+    groupName: group.name,
+    userId,
+    home: options.home ?? 'Paris Saint-Germain',
+    away: options.away ?? 'Olympique de Marseille',
+  };
 }
 
 export async function cleanupTestReminderMatch(bsdEventId = -888001) {

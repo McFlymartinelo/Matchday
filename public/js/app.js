@@ -17,6 +17,7 @@ const state = {
   activeComp: null,
   screen: 'matches',
   standingsTab: 'general',
+  scrollToMatchId: null,
 };
 
 const app = document.getElementById('app');
@@ -38,11 +39,13 @@ export async function init() {
       ? savedGroupId : state.myGroups[0].id;
     await loadGroup(groupId);
     await handleInviteDeepLink();
+    await handleNotificationDeepLink();
     await syncPushIfEnabled();
-    setupPushMessageListener((payload) => {
-      handlePushPayload(payload, state, goToMatches);
-    });
-    startMatchReminders(state, goToMatches);
+    setupPushMessageListener(
+      (payload) => handlePushPayload(payload, state, goToMatch),
+      (payload) => goToMatch(payload),
+    );
+    startMatchReminders(state, goToMatch);
     renderApp();
   } catch (err) {
     auth.logout();
@@ -72,13 +75,76 @@ async function loadGroup(groupId) {
   state.activeComp = await pickCompetitionWithMatches(groupId, state.competitions);
   localStorage.setItem('matchday_group', groupId);
   if (notificationsEnabled()) {
-    startMatchReminders(state, goToMatches);
+    startMatchReminders(state, goToMatch);
   }
 }
 
-function goToMatches() {
+function parseNavFromPayload(payload) {
+  if (!payload) return null;
+  if (payload.matchId) {
+    return {
+      matchId: Number(payload.matchId),
+      groupId: payload.groupId ? Number(payload.groupId) : null,
+      competitionId: payload.competitionId ? Number(payload.competitionId) : null,
+    };
+  }
+  if (payload.url) {
+    try {
+      const params = new URL(payload.url, window.location.origin).searchParams;
+      return {
+        matchId: params.get('match') ? Number(params.get('match')) : null,
+        groupId: params.get('group') ? Number(params.get('group')) : null,
+        competitionId: params.get('comp') ? Number(params.get('comp')) : null,
+      };
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+async function goToMatch(nav) {
+  const target = parseNavFromPayload(nav);
+  if (target?.groupId && state.myGroups.some(g => g.id === target.groupId) && state.group?.id !== target.groupId) {
+    await loadGroup(target.groupId);
+  }
+  if (target?.competitionId) state.activeComp = target.competitionId;
   state.screen = 'matches';
-  renderApp();
+  state.scrollToMatchId = target?.matchId ?? null;
+  await renderApp();
+}
+
+function goToMatches() {
+  goToMatch(null);
+}
+
+async function handleNotificationDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const matchId = params.get('match');
+  const screen = params.get('screen');
+  if (!matchId && screen !== 'matches') return;
+
+  const nav = {
+    matchId: matchId ? Number(matchId) : null,
+    groupId: params.get('group') ? Number(params.get('group')) : null,
+    competitionId: params.get('comp') ? Number(params.get('comp')) : null,
+  };
+
+  history.replaceState({}, '', window.location.pathname);
+
+  if (nav.groupId && state.myGroups.some(g => g.id === nav.groupId)) {
+    await loadGroup(nav.groupId);
+  }
+  if (nav.competitionId) state.activeComp = nav.competitionId;
+  state.screen = 'matches';
+  state.scrollToMatchId = nav.matchId;
+}
+
+function scrollToMatchCard(matchId) {
+  const card = document.querySelector(`.match-card[data-match="${matchId}"]`);
+  if (!card) return;
+  card.classList.add('match-card-highlight');
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.querySelector('input[data-side="home"]')?.focus({ preventScroll: true });
+  setTimeout(() => card.classList.remove('match-card-highlight'), 5000);
 }
 
 function setAuthPage(on) {
@@ -437,7 +503,7 @@ function attachHeaderEvents() {
     openNotificationPanel(btn, {
       onEnabled: () => {
         btn.classList.add('active');
-        startMatchReminders(state, goToMatches);
+        startMatchReminders(state, goToMatch);
         renderApp();
       },
       onDisabled: () => {
@@ -792,8 +858,14 @@ async function renderMatches(el) {
       input.addEventListener('change', onScoreChange);
     });
 
-    const firstOpen = el.querySelector('.matchday-section.matchday-open');
-    firstOpen?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (state.scrollToMatchId) {
+      const id = state.scrollToMatchId;
+      state.scrollToMatchId = null;
+      setTimeout(() => scrollToMatchCard(id), 150);
+    } else {
+      const firstOpen = el.querySelector('.matchday-section.matchday-open');
+      firstOpen?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } catch (e) {
     el.innerHTML = `<div class="empty-state">${e.message}</div>`;
   }

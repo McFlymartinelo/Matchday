@@ -1,6 +1,6 @@
 import { api, showToast } from './api.js';
 
-const SW_URL = '/sw.js?v=6';
+const SW_URL = '/sw.js?v=8';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -175,11 +175,14 @@ export async function sendTestPushFromApp() {
   }
 }
 
-export function setupPushMessageListener(onPush) {
+export function setupPushMessageListener(onPush, onNav) {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data?.type === 'MATCHDAY_PUSH') {
-      onPush(e.data.payload);
+      onPush?.(e.data.payload);
+    }
+    if (e.data?.type === 'MATCHDAY_NAV') {
+      onNav?.(e.data.payload);
     }
   });
 }

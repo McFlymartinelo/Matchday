@@ -13,6 +13,7 @@
     "setup": "npm run migrate && npm run seed",
     "test": "node --test",
     "test:notifications": "node scripts/test-notification-reminder.js",
+    "admin:promote": "node scripts/promote-admin.js",
     "vapid:keys": "node scripts/generate-vapid-keys.js"
   },
   "license": "MIT",

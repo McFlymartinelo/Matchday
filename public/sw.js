@@ -1,4 +1,4 @@
-const CACHE = 'matchday-v7';
+const CACHE = 'matchday-v8';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -15,8 +15,6 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (url.pathname.startsWith('/api/')) return;
 
-  // Navigation uniquement : fallback SPA. Ne jamais servir index.html pour .js/.css
-  // (sinon page blanche si le réseau échoue pendant un cold start Render).
   const isNavigate = e.request.mode === 'navigate'
     || (e.request.method === 'GET' && e.request.headers.get('accept')?.includes('text/html'));
 
@@ -40,6 +38,10 @@ function parsePushPayload(event) {
   }
 }
 
+function absoluteUrl(path) {
+  return new URL(path, self.registration.scope).href;
+}
+
 async function notifyClients(payload) {
   const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   for (const client of allClients) {
@@ -53,7 +55,12 @@ async function showMatchdayNotification(data) {
     tag: data.tag ?? `matchday-${Date.now()}`,
     renotify: true,
     requireInteraction: true,
-    data: { url: data.url ?? '/?screen=matches' },
+    data: {
+      url: data.url ?? '/?screen=matches',
+      matchId: data.matchId ?? null,
+      groupId: data.groupId ?? null,
+      competitionId: data.competitionId ?? null,
+    },
   });
 }
 
@@ -73,16 +80,22 @@ self.addEventListener('push', (e) => {
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const target = e.notification.data?.url ?? '/?screen=matches';
+  const data = e.notification.data ?? {};
+  const target = absoluteUrl(data.url ?? '/?screen=matches');
+
   e.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
       for (const client of list) {
         if ('focus' in client) {
+          client.postMessage({ type: 'MATCHDAY_NAV', payload: { ...data, url: target } });
           if (typeof client.navigate === 'function') {
-            return client.navigate(target).then(() => client.focus());
+            try {
+              await client.navigate(target);
+            } catch {
+              /* navigate non supporté — le message suffit */
+            }
           }
-          client.focus();
-          return;
+          return client.focus();
         }
       }
       return self.clients.openWindow(target);

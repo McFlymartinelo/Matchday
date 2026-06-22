@@ -6,7 +6,7 @@
  *   npm run test:notifications                    # dry-run (affiche les cibles)
  *   npm run test:notifications -- --send          # envoie les push réels
  *   npm run test:notifications -- --list            # liste utilisateurs / abonnements
- *   npm run test:notifications -- --send --username marty --group 1 --minutes 60
+ *   npm run test:notifications -- --send --username marty --minutes 60
  *   npm run test:notifications -- --send --keep   # garde le match test en base
  */
 import 'dotenv/config';
@@ -41,7 +41,7 @@ Options:
   --keep              Ne supprime pas le match test après exécution
   --user <id>         ID utilisateur (défaut: 1)
   --username <name>   Nom de connexion (ex. marty) — prioritaire sur --user
-  --group <id>        ID du groupe (défaut: 1)
+  --group <id>        ID du groupe (optionnel — auto si omis)
   --minutes <n>       Coup d'envoi dans N minutes (défaut: 60)
   --help              Affiche cette aide
 
@@ -50,6 +50,40 @@ Exemples:
   npm run test:notifications -- --send --username marty
   npm run test:notifications -- --send --user 2 --group 1 --minutes 60 --keep
 `);
+}
+
+function dbLabel() {
+  if (process.env.TURSO_DATABASE_URL?.trim()) {
+    const host = process.env.TURSO_DATABASE_URL.replace(/^libsql:\/\//, '').split('.')[0];
+    return `Turso (${host || 'remote'})`;
+  }
+  return 'SQLite local (data/matchday.db)';
+}
+
+async function resolveGroupId(userId, explicitGroupId) {
+  const raw = explicitGroupId ? Number(explicitGroupId) : null;
+  const groups = await all(
+    `SELECT g.id, g.name FROM groups g
+     JOIN group_members gm ON gm.group_id = g.id
+     WHERE gm.user_id = ?
+     ORDER BY g.id ASC`,
+    [userId]
+  );
+
+  if (!groups.length) {
+    throw new Error('Aucun groupe pour cet utilisateur');
+  }
+
+  if (raw) {
+    const match = groups.find(g => g.id === raw);
+    if (!match) {
+      const available = groups.map(g => `#${g.id} ${g.name}`).join(', ');
+      throw new Error(`Groupe ${raw} introuvable — groupes disponibles : ${available}`);
+    }
+    return match;
+  }
+
+  return groups[0];
 }
 
 async function listUsers() {
@@ -102,16 +136,18 @@ const list = args.includes('--list');
 const username = argValue('--username');
 const userId = Number(argValue('--user') ?? 1);
 const minutes = Number(argValue('--minutes') ?? 60);
-const groupId = Number(argValue('--group') ?? 1);
+const groupArg = argValue('--group');
 
 await migrate();
 
 if (list) {
+  console.log(`🗄️  Base ciblée : ${dbLabel()}\n`);
   await listUsers();
   process.exit(0);
 }
 
 console.log('\n📋 Test rappel pronostic Matchday\n');
+console.log(`🗄️  Base ciblée : ${dbLabel()}\n`);
 
 let user;
 try {
@@ -126,17 +162,29 @@ const subs = await all('SELECT id, endpoint FROM push_subscriptions WHERE user_i
 console.log(`👤 ${user.display_name} (@${user.username})`);
 console.log(`📱 Abonnements push enregistrés : ${subs.length}`);
 
+let group;
+try {
+  group = await resolveGroupId(user.id, groupArg);
+} catch (err) {
+  console.error(`❌ ${err.message}`);
+  console.log('💡 Lance : npm run test:notifications -- --list\n');
+  process.exit(1);
+}
+if (!groupArg && group) {
+  console.log(`👥 Groupe auto : #${group.id} ${group.name}`);
+}
+
 const vapid = configureWebPush();
 if (!vapid.ok) {
   console.warn(`⚠️  ${vapid.error}`);
   console.warn('   Lance : npm run vapid:keys\n');
 }
 
-const seeded = await seedTestReminderMatch({ userId: user.id, groupId, minutes });
+const seeded = await seedTestReminderMatch({ userId: user.id, groupId: group.id, minutes });
 console.log(`⚽ Match test créé (#${seeded.matchId})`);
 console.log(`   ${seeded.home} vs ${seeded.away}`);
 console.log(`   Coup d'envoi : ${seeded.kickoff} (dans ~${minutes} min)`);
-console.log(`   Groupe #${groupId} — aucun pronostic pour cet utilisateur\n`);
+console.log(`   Groupe #${group.id} ${group.name} — aucun pronostic pour cet utilisateur\n`);
 
 const targets = await findPendingReminderTargets({ userId: user.id, minutes, windowMinutes: 10 });
 console.log(`🎯 Cibles rappel (fenêtre ${minutes}±10 min) : ${targets.length}`);
