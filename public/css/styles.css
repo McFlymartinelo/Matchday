@@ -1329,24 +1329,56 @@ html[data-theme="dark"] .toast-default {
 .standings-comp-sub { font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-top: 2px; }
 
 .standings-podium {
-  display: flex; align-items: flex-end; justify-content: center; gap: 8px;
-  margin: 8px 0 18px; min-height: 140px;
+  display: flex; align-items: flex-end; justify-content: center; gap: 6px;
+  margin: 12px 0 20px; padding: 0 2px;
 }
-.podium-slot {
-  flex: 1; max-width: 110px; display: flex; flex-direction: column; align-items: center;
-  gap: 6px; padding: 12px 8px 10px; border-radius: 16px 16px 12px 12px;
-  background: var(--card-soft); border: 1.5px solid var(--border-soft);
+.podium-col {
+  flex: 1; max-width: 118px; display: flex; flex-direction: column; align-items: center;
+  gap: 8px; min-width: 0;
 }
-.podium-slot.me { box-shadow: 0 0 0 2px var(--podium-accent, var(--l1)); }
-.podium-1 { min-height: 130px; background: color-mix(in srgb, var(--podium-bg, var(--l1-bg)) 70%, var(--card)); border-color: var(--podium-accent, var(--l1)); }
-.podium-2 { min-height: 108px; }
-.podium-3 { min-height: 92px; }
-.podium-empty { visibility: hidden; }
+.podium-col.me .podium-player {
+  box-shadow: 0 0 0 2px var(--podium-accent, var(--l1));
+  border-radius: 14px;
+}
+.podium-player {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 6px 4px; width: 100%;
+}
+.podium-step {
+  width: 100%; display: flex; align-items: center; justify-content: center;
+  border-radius: 12px 12px 6px 6px; background: var(--card-soft);
+  border: 1.5px solid var(--border-soft);
+  font-family: 'Baloo 2', sans-serif; font-weight: 800; color: var(--ink-soft);
+}
+.podium-step-1 {
+  height: 76px;
+  background: color-mix(in srgb, var(--podium-bg, var(--l1-bg)) 65%, var(--card));
+  border-color: var(--podium-accent, var(--l1));
+  color: var(--podium-accent, var(--l1));
+}
+.podium-step-1 .podium-step-rank { font-size: 30px; line-height: 1; }
+.podium-step-2 { height: 54px; }
+.podium-step-2 .podium-step-rank { font-size: 24px; line-height: 1; }
+.podium-step-3 { height: 40px; }
+.podium-step-3 .podium-step-rank { font-size: 20px; line-height: 1; }
+.podium-col.me .podium-step-1 {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--podium-accent, var(--l1)) 45%, transparent);
+}
+.podium-empty { visibility: hidden; pointer-events: none; }
 .podium-medal { font-size: 22px; line-height: 1; }
-.podium-name { font-size: 12px; font-weight: 800; color: var(--ink); text-align: center; }
-.podium-pts { font-family: 'Baloo 2', sans-serif; font-size: 15px; font-weight: 700; color: var(--podium-accent, var(--l1)); }
+.podium-name {
+  font-size: 12px; font-weight: 800; color: var(--ink); text-align: center;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.podium-pts {
+  font-family: 'Baloo 2', sans-serif; font-size: 16px; font-weight: 700;
+  color: var(--podium-accent, var(--l1)); line-height: 1;
+}
+.podium-pts span { font-size: 10px; font-weight: 700; color: var(--ink-soft); margin-left: 2px; }
 
-.standings-rest { margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
+.standings-rest {
+  margin-top: 6px; border-top: 1px solid var(--border-soft); padding-top: 10px;
+}
 
 .stats-chart-hint {
   font-size: 12px; line-height: 1.45; color: var(--ink-soft); font-weight: 600;
@@ -1397,4 +1429,6 @@ html[data-theme="dark"] .md-player-row.me .md-player-col {
 .md-cell-positive { color: var(--l1); background: color-mix(in srgb, var(--l1-bg) 50%, transparent); }
 .md-cell-zero { opacity: 0.45; }
 html[data-theme="dark"] .md-cell-label { background: var(--card); }
-html[data-theme="dark"] .podium-1 { background: color-mix(in srgb, var(--podium-bg, var(--l1-bg)) 35%, var(--card-soft)); }
+html[data-theme="dark"] .podium-step-1 {
+  background: color-mix(in srgb, var(--podium-bg, var(--l1-bg)) 35%, var(--card-soft));
+}

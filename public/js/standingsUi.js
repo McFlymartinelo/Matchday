@@ -1,14 +1,16 @@
 import { standings, compColors, compLogoHtml } from './api.js';
 import { renderAvatarHtml } from './avatars.js';
 
-function rankingRowsHtml(rows, currentUserId, { compact = false } = {}) {
+function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, showExtras = true } = {}) {
   return rows.map((r, i) => {
+    const rank = startRank + i;
     const isMe = r.userId === currentUserId;
-    const medal = i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1;
-    const extras = [
+    const medal = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank;
+    const pts = r.totalPoints ?? r.total ?? 0;
+    const extras = showExtras ? [
       r.xiPoints ? `11 : +${r.xiPoints}` : '',
       r.specialPoints ? `Vainqueur : +${r.specialPoints}` : '',
-    ].filter(Boolean).join(' · ');
+    ].filter(Boolean).join(' · ') : '';
     return `<div class="standings-row ${isMe ? 'me' : ''} ${compact ? 'standings-row-compact' : ''}">
       <div class="standings-rank">${medal}</div>
       <div class="standings-player">
@@ -18,7 +20,7 @@ function rankingRowsHtml(rows, currentUserId, { compact = false } = {}) {
           ${extras ? `<span class="standings-sub">${extras}</span>` : ''}
         </div>
       </div>
-      <div class="standings-pts">${r.totalPoints}<span>pts</span></div>
+      <div class="standings-pts">${pts}<span>pts</span></div>
     </div>`;
   }).join('');
 }
@@ -29,17 +31,39 @@ function podiumHtml(rows, currentUserId, cc) {
   const order = top.length >= 3 ? [top[1], top[0], top[2]] : top.length === 2 ? [top[1], top[0], null] : [null, top[0], null];
 
   const slot = (r, place) => {
-    if (!r) return `<div class="podium-slot podium-empty podium-${place}"></div>`;
+    if (!r) {
+      return `<div class="podium-col podium-col-${place} podium-empty" aria-hidden="true">
+        <div class="podium-step podium-step-${place}"></div>
+      </div>`;
+    }
     const isMe = r.userId === currentUserId;
-    return `<div class="podium-slot podium-${place} ${isMe ? 'me' : ''}" style="--podium-accent:${cc.color};--podium-bg:${cc.bg}">
-      <div class="podium-medal">${place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'}</div>
-      ${renderAvatarHtml(r.avatar, r.displayName, r.profileColor, 'sm')}
-      <div class="podium-name">${r.displayName.split(' ')[0]}</div>
-      <div class="podium-pts">${r.totalPoints} pts</div>
+    const pts = r.totalPoints ?? r.total ?? 0;
+    return `<div class="podium-col podium-col-${place} ${isMe ? 'me' : ''}" style="--podium-accent:${cc.color};--podium-bg:${cc.bg}">
+      <div class="podium-player">
+        <div class="podium-medal">${place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'}</div>
+        ${renderAvatarHtml(r.avatar, r.displayName, r.profileColor, 'sm')}
+        <div class="podium-name">${r.displayName.split(' ')[0]}</div>
+        <div class="podium-pts">${pts}<span>pts</span></div>
+      </div>
+      <div class="podium-step podium-step-${place}">
+        <span class="podium-step-rank">${place}</span>
+      </div>
     </div>`;
   };
 
   return `<div class="standings-podium">${slot(order[0], 2)}${slot(order[1], 1)}${slot(order[2], 3)}</div>`;
+}
+
+function standingsBlockHtml(rows, currentUserId, cc, { emptyMessage, showExtras = true } = {}) {
+  if (!rows.length) {
+    return `<div class="empty-state">${emptyMessage || 'Aucun point pour l\'instant'}</div>`;
+  }
+  const rest = rows.slice(3);
+  return `${podiumHtml(rows, currentUserId, cc)}${
+    rest.length
+      ? `<div class="standings-rest">${rankingRowsHtml(rest, currentUserId, { startRank: 4, showExtras })}</div>`
+      : ''
+  }`;
 }
 
 function compStandingsPills(comps, selectedId, groupId) {
@@ -73,17 +97,21 @@ function avgChartHtml(members) {
 function evolutionHtml(evolution, members, currentUserId) {
   if (!evolution.length) return '<div class="empty-state">Pas encore de journée terminée</div>';
   const last = evolution[evolution.length - 1];
+  const memberMap = new Map(members.map(m => [m.userId, m]));
+  const rows = last.rankings.map(r => {
+    const m = memberMap.get(r.userId) ?? {};
+    return {
+      userId: r.userId,
+      displayName: r.displayName,
+      avatar: m.avatar,
+      profileColor: m.profileColor,
+      total: r.total,
+    };
+  });
   return `<div class="stats-evolution">
     <div class="stats-chart-title">Classement cumulé après la dernière journée</div>
     <p class="stats-chart-hint">Position générale après <strong>${last.label}</strong> (tous championnats).</p>
-    <div class="evo-rows">${last.rankings.map(r => {
-      const isMe = r.userId === currentUserId;
-      return `<div class="evo-row ${isMe ? 'me' : ''}">
-        <span class="evo-rank">#${r.rank}</span>
-        <span class="evo-name">${r.displayName}</span>
-        <span class="evo-pts">${r.total} pts</span>
-      </div>`;
-    }).join('')}</div>
+    ${standingsBlockHtml(rows, currentUserId, compColors('PL'), { showExtras: false })}
   </div>`;
 }
 
@@ -196,8 +224,7 @@ async function renderByCompTab(body, state) {
         <div class="standings-comp-sub">Classement pronos · vainqueur</div>
       </div>
     </div>
-    ${rows.length ? podiumHtml(rows, state.user.id, cc) : '<div class="empty-state">Aucun point sur ce championnat</div>'}
-    ${rows.length > 3 ? `<div class="standings-rest">${rankingRowsHtml(rows.slice(3), state.user.id)}</div>` : ''}
+    ${standingsBlockHtml(rows, state.user.id, cc, { emptyMessage: 'Aucun point sur ce championnat' })}
   </div>`;
 
   body.querySelectorAll('[data-standings-comp]').forEach(btn => {
@@ -228,8 +255,7 @@ export async function renderStandingsScreen(el, state) {
       body.innerHTML = `<div class="section-card standings-card">
         <div class="section-head"><div class="jn">Classement général</div></div>
         <p class="profile-desc">Tous championnats · pronos + Mon 11 + vainqueurs</p>
-        ${rows.length ? podiumHtml(rows, state.user.id, compColors('PL')) : ''}
-        ${rows.length > 3 ? rankingRowsHtml(rows.slice(3), state.user.id) : rows.length ? rankingRowsHtml(rows, state.user.id) : '<div class="empty-state">Aucun point pour l\'instant</div>'}
+        ${standingsBlockHtml(rows, state.user.id, compColors('PL'))}
       </div>`;
     } else if (state.standingsTab === 'byComp') {
       await renderByCompTab(body, state);
