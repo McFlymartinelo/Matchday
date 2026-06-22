@@ -1,6 +1,90 @@
 import { api, showToast } from './api.js';
 
-const SW_URL = '/sw.js?v=8';
+const SW_URL = '/sw.js?v=9';
+const PENDING_NAV_KEY = 'matchday_pending_nav';
+
+let navHandler = null;
+let pushHandler = null;
+
+export function parseNavFromPayload(payload) {
+  if (!payload) return null;
+  if (payload.matchId) {
+    return {
+      matchId: Number(payload.matchId),
+      groupId: payload.groupId ? Number(payload.groupId) : null,
+      competitionId: payload.competitionId ? Number(payload.competitionId) : null,
+    };
+  }
+  if (payload.url) {
+    try {
+      const params = new URL(payload.url, window.location.origin).searchParams;
+      return {
+        matchId: params.get('match') ? Number(params.get('match')) : null,
+        groupId: params.get('group') ? Number(params.get('group')) : null,
+        competitionId: params.get('comp') ? Number(params.get('comp')) : null,
+      };
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+export function stashNotificationDeepLinkFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const matchId = params.get('match');
+  const screen = params.get('screen');
+  if (!matchId && screen !== 'matches') return;
+
+  sessionStorage.setItem(PENDING_NAV_KEY, JSON.stringify({
+    matchId: matchId ? Number(matchId) : null,
+    groupId: params.get('group') ? Number(params.get('group')) : null,
+    competitionId: params.get('comp') ? Number(params.get('comp')) : null,
+  }));
+  history.replaceState({}, '', window.location.pathname);
+}
+
+export function stashPendingNav(payload) {
+  const nav = parseNavFromPayload(payload);
+  if (!nav?.matchId) return;
+  sessionStorage.setItem(PENDING_NAV_KEY, JSON.stringify(nav));
+}
+
+export function consumePendingNav() {
+  const raw = sessionStorage.getItem(PENDING_NAV_KEY);
+  if (!raw) return null;
+  sessionStorage.removeItem(PENDING_NAV_KEY);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function registerPushHandlers({ onNav, onPush }) {
+  navHandler = onNav;
+  pushHandler = onPush;
+}
+
+function handleServiceWorkerMessage(event) {
+  const { type, payload } = event.data ?? {};
+  if (type === 'MATCHDAY_NAV') {
+    stashPendingNav(payload);
+    if (navHandler) {
+      navHandler(payload);
+      return;
+    }
+    const path = payload?.url || '/?screen=matches';
+    window.location.assign(path.startsWith('/') ? path : `/${path}`);
+    return;
+  }
+  if (type === 'MATCHDAY_PUSH') {
+    pushHandler?.(payload);
+  }
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+  navigator.serviceWorker.register(SW_URL).catch(() => {});
+}
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -20,10 +104,11 @@ async function getServiceWorkerRegistration() {
 }
 
 /** Notification système — essaie plusieurs méthodes (Opera/Windows). */
-export function showSystemNotification(title, body) {
+export function showSystemNotification(title, body, clickUrl) {
   if (Notification.permission !== 'granted') return false;
 
   let shown = false;
+  const openUrl = clickUrl || '/?screen=matches';
 
   try {
     const n = new Notification(title, {
@@ -31,7 +116,11 @@ export function showSystemNotification(title, body) {
       tag: `md-${Date.now()}`,
       requireInteraction: true,
     });
-    n.onclick = () => { window.focus(); n.close(); };
+    n.onclick = () => {
+      n.close();
+      window.focus();
+      window.location.assign(openUrl);
+    };
     shown = true;
   } catch {
     /* fallback SW ci-dessous */
@@ -39,7 +128,12 @@ export function showSystemNotification(title, body) {
 
   if (!shown) {
     navigator.serviceWorker.ready
-      .then(reg => reg.showNotification(title, { body, tag: `md-sw-${Date.now()}`, requireInteraction: true }))
+      .then(reg => reg.showNotification(title, {
+        body,
+        tag: `md-sw-${Date.now()}`,
+        requireInteraction: true,
+        data: { url: openUrl },
+      }))
       .catch(() => {});
   }
 
@@ -176,15 +270,7 @@ export async function sendTestPushFromApp() {
 }
 
 export function setupPushMessageListener(onPush, onNav) {
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.addEventListener('message', (e) => {
-    if (e.data?.type === 'MATCHDAY_PUSH') {
-      onPush?.(e.data.payload);
-    }
-    if (e.data?.type === 'MATCHDAY_NAV') {
-      onNav?.(e.data.payload);
-    }
-  });
+  registerPushHandlers({ onPush, onNav });
 }
 
 export function openNotificationPanel(anchorEl, { onEnabled, onDisabled }) {

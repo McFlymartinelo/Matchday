@@ -1,4 +1,4 @@
-const CACHE = 'matchday-v8';
+const CACHE = 'matchday-v9';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -38,25 +38,36 @@ function parsePushPayload(event) {
   }
 }
 
-function absoluteUrl(path) {
-  return new URL(path, self.registration.scope).href;
+function scopeOrigin() {
+  return new URL(self.registration.scope).origin;
+}
+
+function sameAppClient(client) {
+  try {
+    return new URL(client.url).origin === scopeOrigin();
+  } catch {
+    return false;
+  }
 }
 
 async function notifyClients(payload) {
   const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   for (const client of allClients) {
-    client.postMessage({ type: 'MATCHDAY_PUSH', payload });
+    if (sameAppClient(client)) {
+      client.postMessage({ type: 'MATCHDAY_PUSH', payload });
+    }
   }
 }
 
 async function showMatchdayNotification(data) {
+  const path = data.url ?? '/?screen=matches';
   await self.registration.showNotification(data.title, {
     body: data.body,
     tag: data.tag ?? `matchday-${Date.now()}`,
     renotify: true,
     requireInteraction: true,
     data: {
-      url: data.url ?? '/?screen=matches',
+      url: path,
       matchId: data.matchId ?? null,
       groupId: data.groupId ?? null,
       competitionId: data.competitionId ?? null,
@@ -72,7 +83,10 @@ self.addEventListener('push', (e) => {
       try {
         await showMatchdayNotification(data);
       } catch {
-        await self.registration.showNotification('Matchday', { body: data.body });
+        await self.registration.showNotification('Matchday', {
+          body: data.body,
+          data: { url: data.url ?? '/?screen=matches' },
+        });
       }
     })()
   );
@@ -81,24 +95,23 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const data = e.notification.data ?? {};
-  const target = absoluteUrl(data.url ?? '/?screen=matches');
+  const path = data.url ?? '/?screen=matches';
+  const payload = { ...data, url: path };
 
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
-      for (const client of list) {
-        if ('focus' in client) {
-          client.postMessage({ type: 'MATCHDAY_NAV', payload: { ...data, url: target } });
-          if (typeof client.navigate === 'function') {
-            try {
-              await client.navigate(target);
-            } catch {
-              /* navigate non supporté — le message suffit */
-            }
-          }
-          return client.focus();
-        }
+      const appClients = list.filter(sameAppClient);
+
+      if (appClients.length > 0) {
+        const client = appClients[0];
+        await client.focus();
+        client.postMessage({ type: 'MATCHDAY_NAV', payload });
+        return;
       }
-      return self.clients.openWindow(target);
+
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(path);
+      }
     })
   );
 });

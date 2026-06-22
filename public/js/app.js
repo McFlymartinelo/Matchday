@@ -6,7 +6,7 @@ import { renderProfile } from './profile.js';
 import { renderChampionships } from './championships.js';
 import { renderSeasonXi } from './seasonXi.js';
 import { renderStandingsScreen, compPillsHtml } from './standingsUi.js';
-import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, setupPushMessageListener } from './notifications.js';
+import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers } from './notifications.js';
 import { startMatchReminders, stopMatchReminders, handlePushPayload } from './reminders.js';
 
 const state = {
@@ -24,6 +24,7 @@ const app = document.getElementById('app');
 
 export async function init() {
   if (!auth.isLoggedIn()) {
+    stashNotificationDeepLinkFromUrl();
     renderAuth();
     return;
   }
@@ -39,12 +40,10 @@ export async function init() {
       ? savedGroupId : state.myGroups[0].id;
     await loadGroup(groupId);
     await handleInviteDeepLink();
-    await handleNotificationDeepLink();
+    const pendingNav = consumePendingNav();
+    if (pendingNav) await applyPendingNav(pendingNav);
+    else await handleNotificationDeepLink();
     await syncPushIfEnabled();
-    setupPushMessageListener(
-      (payload) => handlePushPayload(payload, state, goToMatch),
-      (payload) => goToMatch(payload),
-    );
     startMatchReminders(state, goToMatch);
     renderApp();
   } catch (err) {
@@ -79,37 +78,41 @@ async function loadGroup(groupId) {
   }
 }
 
-function parseNavFromPayload(payload) {
-  if (!payload) return null;
-  if (payload.matchId) {
-    return {
-      matchId: Number(payload.matchId),
-      groupId: payload.groupId ? Number(payload.groupId) : null,
-      competitionId: payload.competitionId ? Number(payload.competitionId) : null,
-    };
+async function applyPendingNav(nav) {
+  if (!nav) return false;
+
+  if (nav.groupId && state.myGroups.some(g => g.id === nav.groupId) && state.group?.id !== nav.groupId) {
+    await loadGroup(nav.groupId);
   }
-  if (payload.url) {
-    try {
-      const params = new URL(payload.url, window.location.origin).searchParams;
-      return {
-        matchId: params.get('match') ? Number(params.get('match')) : null,
-        groupId: params.get('group') ? Number(params.get('group')) : null,
-        competitionId: params.get('comp') ? Number(params.get('comp')) : null,
-      };
-    } catch { /* ignore */ }
-  }
-  return null;
+  if (nav.competitionId) state.activeComp = nav.competitionId;
+  state.screen = 'matches';
+  state.scrollToMatchId = nav.matchId ?? null;
+  return true;
 }
 
 async function goToMatch(nav) {
-  const target = parseNavFromPayload(nav);
-  if (target?.groupId && state.myGroups.some(g => g.id === target.groupId) && state.group?.id !== target.groupId) {
-    await loadGroup(target.groupId);
+  const target = parseNavFromPayload(nav) ?? consumePendingNav();
+  if (!target?.matchId && !target?.groupId && !target?.competitionId) {
+    state.screen = 'matches';
+    state.scrollToMatchId = null;
+    await renderApp();
+    return;
   }
-  if (target?.competitionId) state.activeComp = target.competitionId;
-  state.screen = 'matches';
-  state.scrollToMatchId = target?.matchId ?? null;
+
+  await applyPendingNav(target);
   await renderApp();
+
+  if (target.matchId && !document.querySelector(`.match-card[data-match="${target.matchId}"]`)) {
+    try {
+      const all = await matches.list(state.group.id, {});
+      const found = all.find(m => m.id === target.matchId);
+      if (found) {
+        state.activeComp = found.competition_id;
+        state.scrollToMatchId = target.matchId;
+        await renderApp();
+      }
+    } catch { /* ignore */ }
+  }
 }
 
 function goToMatches() {
@@ -122,20 +125,12 @@ async function handleNotificationDeepLink() {
   const screen = params.get('screen');
   if (!matchId && screen !== 'matches') return;
 
-  const nav = {
+  history.replaceState({}, '', window.location.pathname);
+  await applyPendingNav({
     matchId: matchId ? Number(matchId) : null,
     groupId: params.get('group') ? Number(params.get('group')) : null,
     competitionId: params.get('comp') ? Number(params.get('comp')) : null,
-  };
-
-  history.replaceState({}, '', window.location.pathname);
-
-  if (nav.groupId && state.myGroups.some(g => g.id === nav.groupId)) {
-    await loadGroup(nav.groupId);
-  }
-  if (nav.competitionId) state.activeComp = nav.competitionId;
-  state.screen = 'matches';
-  state.scrollToMatchId = nav.matchId;
+  });
 }
 
 function scrollToMatchCard(matchId) {
@@ -924,5 +919,14 @@ async function onScoreChange(e) {
     showToast(err.message);
   }
 }
+
+registerPushHandlers({
+  onNav: (payload) => {
+    if (state.user && state.group) goToMatch(payload);
+  },
+  onPush: (payload) => {
+    if (state.user && state.group) handlePushPayload(payload, state, goToMatch);
+  },
+});
 
 init();

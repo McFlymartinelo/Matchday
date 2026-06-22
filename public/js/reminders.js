@@ -42,10 +42,13 @@ export function showReminderBanner(match, onGo) {
 export function alertForMatch(match, onGo) {
   const mins = Math.max(1, Math.round((new Date(match.kickoff_at) - Date.now()) / 60000));
   const body = `${match.home_team_name} vs ${match.away_team_name} dans ~${mins} min`;
+  const clickUrl = match.id && match.groupId
+    ? `/?screen=matches&group=${match.groupId}${match.competition_id ? `&comp=${match.competition_id}` : ''}&match=${match.id}`
+    : '/?screen=matches';
 
   showReminderBanner(match, onGo);
   showToast(`⏰ ${body}`);
-  showSystemNotification('⏰ Pronostic à faire', body);
+  showSystemNotification('⏰ Pronostic à faire', body, clickUrl);
 }
 
 export async function checkMatchReminders(state, onGo) {
