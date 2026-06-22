@@ -225,18 +225,9 @@ export async function collectUpcomingFixtures(leagueId) {
   const from = new Date().toISOString().slice(0, 10);
   const to = new Date(Date.now() + 400 * 86400000).toISOString().slice(0, 10);
   const raw = await getEventsByDateRange(leagueId, from, to);
-  const bySeason = new Map();
-  for (const e of raw) {
-    const sid = e.season_id ?? 0;
-    if (!bySeason.has(sid)) bySeason.set(sid, []);
-    bySeason.get(sid).push(e);
-  }
-  const events = [];
-  for (const [seasonId, seasonEvents] of bySeason) {
-    const allowed = await getStandingTeamNames(leagueId, seasonId || null);
-    events.push(...filterValidLeagueEvents(seasonEvents, allowed));
-  }
-  return events;
+  // Calendrier officiel BSD — ne pas filtrer via le classement de la saison précédente
+  // (sinon les promus/disparus manquent, ex. Le Mans, Troyes en L1 26/27).
+  return filterEventsByRoundDateConsistency(raw);
 }
 
 /** Calendrier complet : matchs à venir + saison courante BSD. */
