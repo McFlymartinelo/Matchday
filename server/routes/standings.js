@@ -117,14 +117,24 @@ router.get('/:groupId/standings/official/:competitionId', authRequired, groupMem
   if (!member) return res.status(403).json({ error: 'Championnat non suivi par ce groupe' });
 
   const season = await getCompetitionSeason(compId);
-  const rows = await all(
+  let rows = await all(
     'SELECT * FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
     [compId, season]
   );
+  rows = dedupeStandingsRows(rows);
   res.json(rows);
 });
 
-/** Classements officiels de tous les championnats du groupe */
+function dedupeStandingsRows(rows) {
+  const byPos = new Map();
+  for (const r of rows) {
+    const pos = Number(r.position);
+    if (!pos) continue;
+    const existing = byPos.get(pos);
+    if (!existing || (r.points ?? 0) > (existing.points ?? 0)) byPos.set(pos, r);
+  }
+  return [...byPos.values()].sort((a, b) => a.position - b.position);
+}
 router.get('/:groupId/standings/official', authRequired, groupMemberRequired, async (req, res) => {
   const comps = await all(
     `SELECT c.* FROM competitions c
@@ -137,10 +147,11 @@ router.get('/:groupId/standings/official', authRequired, groupMemberRequired, as
   const result = [];
   for (const c of comps) {
     const season = c.saison_active ?? '2025-2026';
-    const rows = await all(
+    let rows = await all(
       'SELECT position, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
       [c.id, season]
     );
+    rows = dedupeStandingsRows(rows);
     result.push({
       competition: {
         id: c.id, code: c.code, nom: c.nom, emoji: c.emoji, logo: c.logo,

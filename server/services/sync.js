@@ -155,6 +155,8 @@ export async function syncStandings(competitionId, bsdLeagueId) {
       rows = teams.map((t, i) => ({ position: i + 1, team_name: t.team_name, played: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0, points: 0 }));
     }
 
+    await run('DELETE FROM official_standings WHERE competition_id = ? AND season = ?', [competitionId, seasonLabel]);
+
     for (const row of rows) {
       const teamName = row.team?.name ?? row.team_name ?? row.name;
       if (!teamName) continue;

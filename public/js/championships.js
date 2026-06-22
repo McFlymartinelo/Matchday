@@ -17,7 +17,7 @@ function renderLeagueTable(comp, rows) {
     </div>`;
   }
 
-  return `<div class="section-card league-table-card">
+  return `<div class="section-card league-table-card" style="--league-color:${comp.couleur ?? cc.color};--league-bg:${comp.couleurBg ?? cc.bg}">
     <div class="section-head">
       <div class="jn">
         <div class="comp-flag" style="background:${comp.couleurBg ?? cc.bg};color:${comp.couleur ?? cc.color}">${comp.code}</div>
@@ -35,21 +35,15 @@ function renderLeagueTable(comp, rows) {
       const gdStr = gd > 0 ? `+${gd}` : String(gd);
       const isLeader = r.position === 1;
       const isRelegation = r.position >= relegateFrom && total >= 5;
-      const color = comp.couleur ?? cc.color;
-      const bg = comp.couleurBg ?? cc.bg;
-      let rowStyle = '';
-      if (isLeader) rowStyle = `background:${bg}`;
-      if (isRelegation) rowStyle = 'background:#FCE7E1';
-      const posStyle = isLeader ? `background:${color};color:white` : '';
-      return `<div class="league-row ${isLeader ? 'leader' : ''} ${isRelegation ? 'relegation' : ''}" style="${rowStyle}">
-        <span class="league-pos" style="${posStyle}">${r.position}</span>
+      return `<div class="league-row ${isLeader ? 'leader' : ''} ${isRelegation ? 'relegation' : ''}">
+        <span class="league-pos">${r.position}</span>
         <span class="league-team">
           ${teamCrest(r.team_name, comp.code)}
-          <span class="league-team-name">${r.team_name}</span>
+          <span class="league-team-name" title="${r.team_name}">${r.team_name}</span>
         </span>
         <span class="league-stat">${r.played ?? 0}</span>
         <span class="league-stat ${gd > 0 ? 'positive' : gd < 0 ? 'negative' : ''}">${gdStr}</span>
-        <span class="league-pts" style="${isLeader ? `color:${color}` : ''}">${r.points ?? 0}</span>
+        <span class="league-pts">${r.points ?? 0}</span>
       </div>`;
     }).join('')}
     ${total >= 5 ? `<div class="league-legend">
