@@ -106,8 +106,15 @@ function matchdayPointsHtml(pointsByMatchday, members) {
       const cls = pts > 0 ? 'md-cell-positive' : pts === 0 ? 'md-cell-zero' : '';
       return `<td class="md-cell ${cls}">${pts > 0 ? `+${pts}` : '0'}</td>`;
     }).join('');
+    const code = round.compCode ?? '';
+    const md = round.matchday ?? round.label?.replace(/^.*J/, '') ?? '?';
+    const nom = round.compNom ?? code;
     return `<tr>
-      <th class="md-cell-label">${round.label}</th>
+      <th class="md-cell-label">
+        <span class="md-label-code">${code}</span>
+        <span class="md-label-name">${nom}</span>
+        <span class="md-label-md">Journée ${md}</span>
+      </th>
       ${cells}
     </tr>`;
   }).join('');
@@ -115,8 +122,9 @@ function matchdayPointsHtml(pointsByMatchday, members) {
   return `<div class="stats-matchdays">
     <div class="stats-chart-title">Points marqués par journée</div>
     <p class="stats-chart-hint">
-      Combien chaque joueur a <strong>gagné sur cette journée</strong> (pronos + Mon 11).
-      Ce n'est pas le classement total — seulement les points de la J.
+      Points de <strong>pronostic</strong> gagnés sur chaque journée terminée.
+      Les <strong>5 dernières journées</strong> de tous les championnats (tri par date).
+      Ex. deux lignes <strong>L1</strong> = J2 et J34 de Ligue 1, ce n'est pas un doublon.
     </p>
     <div class="md-table-wrap">
       <table class="md-table">
@@ -181,7 +189,7 @@ async function renderByCompTab(body, state) {
       ${compLogoHtml(selected, 'comp-head-logo')}
       <div>
         <div class="standings-comp-title">${selected.nom}</div>
-        <div class="standings-comp-sub">Classement pronos · Mon 11 · vainqueur</div>
+        <div class="standings-comp-sub">Classement pronos · vainqueur</div>
       </div>
     </div>
     ${rows.length ? podiumHtml(rows, state.user.id, cc) : '<div class="empty-state">Aucun point sur ce championnat</div>'}

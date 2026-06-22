@@ -273,17 +273,21 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
   );
 
   const roundKey = (compId, md) => `${compId}:${md}`;
-  const pointsLookup = new Map();
+  const predLookup = new Map();
+  const fullLookup = new Map();
   for (const r of roundPoints) {
     const k = roundKey(r.competition_id, r.matchday);
-    if (!pointsLookup.has(k)) pointsLookup.set(k, new Map());
-    pointsLookup.get(k).set(r.user_id, Number(r.points));
+    if (!predLookup.has(k)) predLookup.set(k, new Map());
+    if (!fullLookup.has(k)) fullLookup.set(k, new Map());
+    const pts = Number(r.points);
+    predLookup.get(k).set(r.user_id, pts);
+    fullLookup.get(k).set(r.user_id, pts);
   }
   for (const r of xiRoundPoints) {
     const k = roundKey(r.competition_id, r.matchday);
-    if (!pointsLookup.has(k)) pointsLookup.set(k, new Map());
-    const prev = pointsLookup.get(k).get(r.user_id) ?? 0;
-    pointsLookup.get(k).set(r.user_id, prev + Number(r.points));
+    if (!fullLookup.has(k)) fullLookup.set(k, new Map());
+    const prev = fullLookup.get(k).get(r.user_id) ?? 0;
+    fullLookup.get(k).set(r.user_id, prev + Number(r.points));
   }
 
   const cumulative = new Map(members.map(m => [m.userId, 0]));
@@ -292,14 +296,21 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
 
   rounds.forEach((round, idx) => {
     const k = roundKey(round.competition_id, round.matchday);
-    const byUser = pointsLookup.get(k) ?? new Map();
-    const label = `${round.comp_code} J${round.matchday}`;
-    const roundPts = { round: idx + 1, label, points: {} };
+    const byUserPred = predLookup.get(k) ?? new Map();
+    const byUserFull = fullLookup.get(k) ?? new Map();
+    const label = `${round.comp_code} · J${round.matchday}`;
+    const roundPts = {
+      round: idx + 1,
+      label,
+      compCode: round.comp_code,
+      compNom: round.comp_nom,
+      matchday: round.matchday,
+      points: {},
+    };
 
     for (const m of members) {
-      const pts = byUser.get(m.userId) ?? 0;
-      roundPts.points[m.userId] = pts;
-      cumulative.set(m.userId, (cumulative.get(m.userId) ?? 0) + pts);
+      roundPts.points[m.userId] = byUserPred.get(m.userId) ?? 0;
+      cumulative.set(m.userId, (cumulative.get(m.userId) ?? 0) + (byUserFull.get(m.userId) ?? 0));
     }
 
     const ranked = [...members]
