@@ -1,11 +1,11 @@
 import { run, get } from './connection.js';
 
 const COMPETITIONS = [
-  { code: 'L1', bsd_league_id: null, nom: 'Ligue 1', pays: 'France', emoji: '🇫🇷', logo: 'https://crests.football-data.org/FL1.svg', couleur: '#2D8B57', couleur_bg: '#E2F5EA' },
-  { code: 'PL', bsd_league_id: null, nom: 'Premier League', pays: 'Angleterre', emoji: '🏴', logo: 'https://crests.football-data.org/PL.svg', couleur: '#6B3FD6', couleur_bg: '#EFE8FC' },
-  { code: 'PD', bsd_league_id: null, nom: 'Liga', pays: 'Espagne', emoji: '🇪🇸', logo: 'https://crests.football-data.org/PD.svg', couleur: '#E0532E', couleur_bg: '#FCE7E1' },
-  { code: 'SA', bsd_league_id: null, nom: 'Serie A', pays: 'Italie', emoji: '🇮🇹', logo: 'https://crests.football-data.org/SA.svg', couleur: '#1C6FD0', couleur_bg: '#E3EFFC' },
-  { code: 'BL1', bsd_league_id: null, nom: 'Bundesliga', pays: 'Allemagne', emoji: '🇩🇪', logo: 'https://crests.football-data.org/BL1.svg', couleur: '#C9701F', couleur_bg: '#FDF1E2' },
+  { code: 'L1', bsd_league_id: null, nom: 'Ligue 1', pays: 'France', emoji: '🇫🇷', logo: 'https://crests.football-data.org/FL1.png', couleur: '#2D8B57', couleur_bg: '#E2F5EA' },
+  { code: 'PL', bsd_league_id: null, nom: 'Premier League', pays: 'Angleterre', emoji: '🏴', logo: 'https://crests.football-data.org/PL.png', couleur: '#6B3FD6', couleur_bg: '#EFE8FC' },
+  { code: 'PD', bsd_league_id: null, nom: 'Liga', pays: 'Espagne', emoji: '🇪🇸', logo: 'https://crests.football-data.org/PD.png', couleur: '#E0532E', couleur_bg: '#FCE7E1' },
+  { code: 'SA', bsd_league_id: null, nom: 'Serie A', pays: 'Italie', emoji: '🇮🇹', logo: 'https://crests.football-data.org/SA.png', couleur: '#1C6FD0', couleur_bg: '#E3EFFC' },
+  { code: 'BL1', bsd_league_id: null, nom: 'Bundesliga', pays: 'Allemagne', emoji: '🇩🇪', logo: 'https://crests.football-data.org/BL1.png', couleur: '#C9701F', couleur_bg: '#FDF1E2' },
 ];
 
 /** Matchs de démo si BSD indisponible — pronostics ouverts */

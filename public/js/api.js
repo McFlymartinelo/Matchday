@@ -147,10 +147,11 @@ export function compColors(code) {
 }
 
 export function compLogoHtml(comp, className = 'comp-logo') {
-  if (comp?.logo) {
-    const fallback = comp.emoji ?? comp.code ?? '';
-    return `<img src="${comp.logo}" alt="" class="${className}" loading="lazy"
-      onerror="this.outerHTML='${fallback.replace(/'/g, "\\'")}'">`;
+  const logo = comp?.logo?.replace(/\.svg(\?.*)?$/i, '.png$1');
+  if (logo) {
+    const fallback = (comp.emoji ?? comp.code ?? '').replace(/'/g, "\\'");
+    return `<img src="${logo}" alt="" class="${className}" loading="lazy"
+      onerror="this.outerHTML='${fallback}'">`;
   }
   return comp?.emoji ?? '';
 }
