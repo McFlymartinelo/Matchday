@@ -1,4 +1,4 @@
-import { standings, compColors, compLogoHtml } from './api.js';
+import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js';
 import { renderAvatarHtml } from './avatars.js';
 
 function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, showExtras = true } = {}) {
@@ -66,11 +66,24 @@ function standingsBlockHtml(rows, currentUserId, cc, { emptyMessage, showExtras 
   }`;
 }
 
-function compStandingsPills(comps, selectedId, groupId) {
+function standingsCompStorageKey(groupId) {
+  return `matchday_standings_comp_${groupId}`;
+}
+
+function resolveStandingsComp(state, comps) {
+  const saved = loadSavedCompId(standingsCompStorageKey(state.group?.id), comps);
+  if (saved != null) state.standingsCompId = saved;
+  if (!state.standingsCompId || !findCompetition(comps, state.standingsCompId)) {
+    state.standingsCompId = compId(comps[0]?.id);
+  }
+  return findCompetition(comps, state.standingsCompId) ?? comps[0];
+}
+
+function compStandingsPills(comps, selectedId) {
   return `<div class="standings-comp-pills">${comps.map(c => {
-    const active = c.id === selectedId ? 'active' : '';
+    const active = sameCompId(c.id, selectedId) ? 'active' : '';
     const cc = compColors(c.code);
-    const style = c.id === selectedId ? `background:${cc.color};color:white;border-color:${cc.color}` : '';
+    const style = sameCompId(c.id, selectedId) ? `background:${cc.color};color:white;border-color:${cc.color}` : '';
     return `<button type="button" class="standings-comp-pill ${active}" data-standings-comp="${c.id}" style="${style}">
       ${compLogoHtml(c, 'comp-pill-logo')} ${c.code}
     </button>`;
@@ -207,11 +220,7 @@ async function renderByCompTab(body, state) {
     return;
   }
 
-  if (!state.standingsCompId || !comps.find(c => c.id === state.standingsCompId)) {
-    state.standingsCompId = comps[0].id;
-  }
-
-  const selected = comps.find(c => c.id === state.standingsCompId) ?? comps[0];
+  const selected = resolveStandingsComp(state, comps);
   const cc = compColors(selected.code);
   const rows = await standings.general(state.group.id, selected.id);
 
@@ -229,9 +238,14 @@ async function renderByCompTab(body, state) {
 
   body.querySelectorAll('[data-standings-comp]').forEach(btn => {
     btn.onclick = () => {
-      state.standingsCompId = Number(btn.dataset.standingsComp);
+      state.standingsCompId = compId(btn.dataset.standingsComp);
+      saveCompId(standingsCompStorageKey(state.group.id), state.standingsCompId);
       renderByCompTab(body, state);
     };
+  });
+
+  requestAnimationFrame(() => {
+    body.querySelector('.standings-comp-pill.active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   });
 }
 
@@ -276,8 +290,8 @@ export async function renderStandingsScreen(el, state) {
 export function compPillsHtml(state) {
   if (state.competitions.length <= 1) return '';
   return `<div class="comp-grid">${state.competitions.map(c => {
-    const active = c.id === state.activeComp ? 'active' : '';
-    const style = c.id === state.activeComp ? `background:${c.couleur};color:white` : '';
+    const active = sameCompId(c.id, state.activeComp) ? 'active' : '';
+    const style = sameCompId(c.id, state.activeComp) ? `background:${c.couleur};color:white` : '';
     return `<button class="comp-pill ${active}" data-comp="${c.id}" style="${style}">
       ${compLogoHtml(c, 'comp-pill-logo')} ${c.nom}
     </button>`;

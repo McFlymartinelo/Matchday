@@ -1,4 +1,4 @@
-import { standings, teamCrest, compColors, compLogoHtml, showToast, buildTeamLogoMap, normTeamName } from './api.js';
+import { standings, teamCrest, compColors, compLogoHtml, showToast, buildTeamLogoMap, normTeamName, compId, sameCompId } from './api.js';
 
 function renderLeagueTable(comp, rows, logoMap) {
   const cc = compColors(comp.code);
@@ -62,9 +62,9 @@ export async function renderChampionships(el, state) {
       standings.allOfficial(state.group.id),
       buildTeamLogoMap(state.group.id),
     ]);
-    const activeId = state.activeComp ?? state.competitions[0]?.id;
+    const activeId = compId(state.activeComp) ?? compId(state.competitions[0]?.id);
     const filtered = activeId
-      ? data.filter(d => d.competition.id === activeId)
+      ? data.filter(d => sameCompId(d.competition.id, activeId))
       : data;
 
     if (!data.length) {

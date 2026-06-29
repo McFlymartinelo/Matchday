@@ -1,4 +1,4 @@
-import { auth, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName } from './api.js';
+import { auth, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
@@ -61,18 +61,31 @@ async function pickCompetitionWithMatches(groupId, competitions) {
     const open = list.filter(m => !m.isLocked);
     if (open.length) {
       open.sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at));
-      return open[0].competition_id;
+      return compId(open[0].competition_id);
     }
-    if (list.length) return list[0].competition_id;
+    if (list.length) return compId(list[0].competition_id);
   } catch { /* ignore */ }
-  return competitions[0]?.id ?? null;
+  return compId(competitions[0]?.id);
+}
+
+function activeCompStorageKey(groupId) {
+  return `matchday_active_comp_${groupId}`;
+}
+
+function setActiveComp(competitionId) {
+  const id = compId(competitionId);
+  if (id == null) return;
+  state.activeComp = id;
+  if (state.group?.id) saveCompId(activeCompStorageKey(state.group.id), id);
 }
 
 async function loadGroup(groupId) {
   stopMatchReminders();
   state.group = await groups.get(groupId);
   state.competitions = state.group.competitions ?? [];
-  state.activeComp = await pickCompetitionWithMatches(groupId, state.competitions);
+  const saved = loadSavedCompId(activeCompStorageKey(groupId), state.competitions);
+  state.activeComp = saved ?? await pickCompetitionWithMatches(groupId, state.competitions);
+  if (state.activeComp != null) saveCompId(activeCompStorageKey(groupId), state.activeComp);
   localStorage.setItem('matchday_group', groupId);
   if (notificationsEnabled()) {
     startMatchReminders(state, openMatchFromNotif);
@@ -85,7 +98,7 @@ async function applyPendingNav(nav) {
   if (nav.groupId && state.myGroups.some(g => g.id === nav.groupId) && state.group?.id !== nav.groupId) {
     await loadGroup(nav.groupId);
   }
-  if (nav.competitionId) state.activeComp = nav.competitionId;
+  if (nav.competitionId) setActiveComp(nav.competitionId);
   state.screen = 'matches';
   state.scrollToMatchId = nav.matchId ?? null;
   return true;
@@ -108,7 +121,7 @@ async function goToMatch(nav) {
       const all = await matches.list(state.group.id, {});
       const found = all.find(m => m.id === target.matchId);
       if (found) {
-        state.activeComp = found.competition_id;
+        setActiveComp(found.competition_id);
         state.scrollToMatchId = target.matchId;
         await renderApp();
       }
@@ -154,7 +167,7 @@ async function ensureMatchVisible(matchId) {
   const found = all.find(m => m.id === matchId);
   if (!found) return false;
 
-  state.activeComp = found.competition_id;
+  setActiveComp(found.competition_id);
   return true;
 }
 
@@ -810,7 +823,11 @@ async function renderApp() {
     btn.onclick = () => { state.screen = btn.dataset.nav; renderApp(); };
   });
   document.querySelectorAll('[data-comp]').forEach(btn => {
-    btn.onclick = () => { state.activeComp = Number(btn.dataset.comp); renderApp(); };
+    btn.onclick = () => { setActiveComp(btn.dataset.comp); renderApp(); };
+  });
+
+  requestAnimationFrame(() => {
+    document.querySelector('.comp-pill.active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   });
 
   attachHeaderEvents();
@@ -843,7 +860,7 @@ async function renderMatches(el) {
       return;
     }
 
-    const comp = state.competitions.find(c => c.id === state.activeComp) ?? matchList[0];
+    const comp = findCompetition(state.competitions, state.activeComp) ?? matchList[0];
     const season = matchList[0].season ?? comp.saisonActive ?? comp.saison_active ?? '2025-2026';
     const calendarClosed = matchList.every(m => m.calendarClosed ?? m.isLocked);
     const closedBanner = calendarClosed

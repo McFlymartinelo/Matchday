@@ -9,6 +9,36 @@ function setToken(token) {
   else localStorage.removeItem('matchday_token');
 }
 
+/** Normalise un id championnat (évite les resets string vs number). */
+export function compId(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function sameCompId(a, b) {
+  const na = compId(a);
+  const nb = compId(b);
+  return na != null && nb != null && na === nb;
+}
+
+export function findCompetition(comps, id) {
+  const wanted = compId(id);
+  if (wanted == null) return null;
+  return comps.find(c => sameCompId(c.id, wanted)) ?? null;
+}
+
+export function loadSavedCompId(key, comps) {
+  const saved = compId(localStorage.getItem(key));
+  if (saved == null) return null;
+  return findCompetition(comps, saved) ? saved : null;
+}
+
+export function saveCompId(key, id) {
+  const n = compId(id);
+  if (n != null) localStorage.setItem(key, String(n));
+}
+
 export async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   const token = getToken();
