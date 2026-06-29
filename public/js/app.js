@@ -930,7 +930,7 @@ function matchCardHtml(m, cc, logoMap) {
 
   return `<div class="match-card" data-match="${m.id}">
     <div class="match-top">
-      <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}${m.home_team_name}</div>
+      <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${m.home_team_name}</span></div>
       <div class="score-mid">
         <div class="score-pill ${filled ? 'filled' : ''}" style="${filled ? `color:${cc.color};border-color:${cc.color};background:${cc.bg}` : ''}">
           ${m.isLocked ? (h !== '' ? h : '–') : `<input type="number" min="0" max="20" data-side="home" data-match="${m.id}" value="${h}" placeholder="–">`}
@@ -939,7 +939,7 @@ function matchCardHtml(m, cc, logoMap) {
           ${m.isLocked ? (a !== '' ? a : '–') : `<input type="number" min="0" max="20" data-side="away" data-match="${m.id}" value="${a}" placeholder="–">`}
         </div>
       </div>
-      <div class="team right">${m.away_team_name}${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
+      <div class="team right"><span class="team-name">${m.away_team_name}</span>${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
     </div>
     <div class="match-bottom ${bottomClass}" style="${bottomClass === 'points' ? `color:${cc.color}` : ''}">${bottom}</div>
   </div>`;
