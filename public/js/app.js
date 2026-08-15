@@ -1,4 +1,4 @@
-import { auth, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js';
+import { auth, api, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js?v=45';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
@@ -431,7 +431,10 @@ async function doResetPassword(authUi, syncAuthUi) {
   errEl.classList.add('hidden');
 
   try {
-    await auth.resetPassword({ username, password });
+    await api('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
     showToast('Mot de passe mis à jour — tu peux te connecter', 'success');
     authUi.mode = 'login';
     document.getElementById('password').value = '';
