@@ -266,7 +266,7 @@ async function renderAuth() {
         <h1 class="auth-title">Matchday</h1>
         <p class="auth-sub">Connecte-toi pour jouer</p>
 
-        <div class="auth-tabs">
+        <div class="auth-tabs" id="auth-tabs">
           <button type="button" class="auth-tab active" data-mode="login">Connexion</button>
           <button type="button" class="auth-tab" data-mode="register">Inscription</button>
         </div>
@@ -274,6 +274,9 @@ async function renderAuth() {
         <form id="auth-form" class="auth-form" novalidate>
           <input id="username" class="auth-input" name="username" autocomplete="username" placeholder="Pseudo" required>
           <input id="password" class="auth-input" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+          <input id="password-confirm" class="auth-input hidden" name="password-confirm" type="password" autocomplete="new-password" placeholder="Confirmer le mot de passe">
+          <button type="button" id="forgot-link" class="auth-forgot-link">Mot de passe oublié ?</button>
+          <button type="button" id="back-login-link" class="auth-forgot-link hidden">← Retour à la connexion</button>
 
           <div id="join-section" class="auth-join-block hidden">
             <div class="auth-section-label">Rejoindre un groupe</div>
@@ -296,10 +299,15 @@ async function renderAuth() {
   const form = document.getElementById('auth-form');
   const errEl = document.getElementById('auth-error');
   const passwordEl = document.getElementById('password');
+  const passwordConfirmEl = document.getElementById('password-confirm');
+  const forgotLink = document.getElementById('forgot-link');
+  const backLoginLink = document.getElementById('back-login-link');
+  const authTabs = document.getElementById('auth-tabs');
   const joinSection = document.getElementById('join-section');
   const joinPick = document.getElementById('join-pick');
   const joinCode = document.getElementById('join-code');
   const submitBtn = document.getElementById('auth-submit');
+  const authSub = document.querySelector('.auth-sub');
 
   const clearError = () => {
     errEl.textContent = '';
@@ -307,6 +315,10 @@ async function renderAuth() {
   };
 
   const syncAuthUi = () => {
+    const isRegister = authUi.mode === 'register';
+    const isForgot = authUi.mode === 'forgot';
+
+    authTabs.classList.toggle('hidden', isForgot);
     document.querySelectorAll('.auth-tab').forEach(tab => {
       tab.classList.toggle('active', tab.dataset.mode === authUi.mode);
     });
@@ -314,12 +326,25 @@ async function renderAuth() {
       tab.classList.toggle('active', tab.dataset.join === authUi.joinMode);
     });
 
-    const isRegister = authUi.mode === 'register';
     joinSection.classList.toggle('hidden', !isRegister);
     joinPick.classList.toggle('hidden', !isRegister || authUi.joinMode !== 'pick');
     joinCode.classList.toggle('hidden', !isRegister || authUi.joinMode !== 'code');
-    submitBtn.textContent = isRegister ? "S'inscrire" : 'Se connecter';
-    passwordEl.autocomplete = isRegister ? 'new-password' : 'current-password';
+    passwordConfirmEl.classList.toggle('hidden', !isForgot);
+    forgotLink.classList.toggle('hidden', !authUi.mode || authUi.mode !== 'login');
+    backLoginLink.classList.toggle('hidden', !isForgot);
+
+    if (isForgot) {
+      submitBtn.textContent = 'Réinitialiser le mot de passe';
+      passwordEl.placeholder = 'Nouveau mot de passe';
+      passwordEl.autocomplete = 'new-password';
+      authSub.textContent = 'Choisis un nouveau mot de passe';
+    } else {
+      submitBtn.textContent = isRegister ? "S'inscrire" : 'Se connecter';
+      passwordEl.placeholder = 'Mot de passe';
+      passwordEl.autocomplete = isRegister ? 'new-password' : 'current-password';
+      authSub.textContent = 'Connecte-toi pour jouer';
+    }
+
     const inviteEl = document.getElementById('invite-code');
     if (inviteEl && pendingJoin && isRegister && authUi.joinMode === 'code') {
       inviteEl.value = pendingJoin;
@@ -329,10 +354,25 @@ async function renderAuth() {
   document.querySelectorAll('.auth-tab').forEach(tab => {
     tab.onclick = () => {
       authUi.mode = tab.dataset.mode;
+      passwordConfirmEl.value = '';
       clearError();
       syncAuthUi();
     };
   });
+
+  forgotLink.onclick = () => {
+    authUi.mode = 'forgot';
+    passwordConfirmEl.value = '';
+    clearError();
+    syncAuthUi();
+  };
+
+  backLoginLink.onclick = () => {
+    authUi.mode = 'login';
+    passwordConfirmEl.value = '';
+    clearError();
+    syncAuthUi();
+  };
 
   document.querySelectorAll('.auth-subtab').forEach(tab => {
     tab.onclick = () => {
@@ -344,23 +384,65 @@ async function renderAuth() {
 
   form.querySelector('#username').addEventListener('input', clearError);
   passwordEl.addEventListener('input', clearError);
+  passwordConfirmEl.addEventListener('input', clearError);
   document.getElementById('invite-code')?.addEventListener('input', clearError);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    doAuth(authUi);
+    if (authUi.mode === 'forgot') doResetPassword(authUi, syncAuthUi);
+    else doAuth(authUi);
   });
 
   syncAuthUi();
 }
 
-function validateAuthInput(mode, username, password) {
+function validateAuthInput(mode, username, password, passwordConfirm = '') {
   if (!username) return 'Choisis un pseudo';
   if (!password) return 'Entre un mot de passe';
   if (mode === 'register' && password.length < 6) {
     return 'Mot de passe trop court — 6 caractères minimum';
   }
+  if (mode === 'forgot') {
+    if (password.length < 6) {
+      return 'Mot de passe trop court — 6 caractères minimum';
+    }
+    if (password !== passwordConfirm) {
+      return 'Les mots de passe ne correspondent pas';
+    }
+  }
   return null;
+}
+
+async function doResetPassword(authUi, syncAuthUi) {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const passwordConfirm = document.getElementById('password-confirm').value;
+  const errEl = document.getElementById('auth-error');
+  const submitBtn = document.getElementById('auth-submit');
+
+  const validationError = validateAuthInput('forgot', username, password, passwordConfirm);
+  if (validationError) {
+    errEl.textContent = validationError;
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  errEl.classList.add('hidden');
+
+  try {
+    await auth.resetPassword({ username, password });
+    showToast('Mot de passe mis à jour — tu peux te connecter', 'success');
+    authUi.mode = 'login';
+    document.getElementById('password').value = '';
+    document.getElementById('password-confirm').value = '';
+    syncAuthUi();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    submitBtn.disabled = false;
+  }
 }
 
 async function doAuth(authUi) {

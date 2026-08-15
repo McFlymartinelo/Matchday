@@ -60,6 +60,7 @@ export async function apiPublic(path) {
 export const auth = {
   register: (body) => api('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body) => api('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  resetPassword: (body) => api('/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
   me: () => api('/auth/me'),
   updateProfile: (body) => api('/auth/me', { method: 'PATCH', body: JSON.stringify(body) }),
   logout: () => setToken(null),

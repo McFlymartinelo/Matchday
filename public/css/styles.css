@@ -240,6 +240,22 @@ body.auth-page {
 .auth-submit:active { opacity: .88; }
 .auth-submit:disabled { opacity: .55; cursor: not-allowed; }
 
+.auth-forgot-link {
+  align-self: flex-end;
+  margin: -4px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pl);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: right;
+}
+
+.auth-forgot-link.hidden { display: none; }
+
 .auth-screen .error-msg {
   color: #f87171;
   font-size: 13px;

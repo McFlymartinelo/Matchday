@@ -36,6 +36,30 @@ router.post('/register', async (req, res) => {
   }
 });
 
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username?.trim()) {
+      return res.status(400).json({ error: 'Choisis un pseudo' });
+    }
+    if (!password) {
+      return res.status(400).json({ error: 'Entre un mot de passe' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Mot de passe trop court — 6 caractères minimum' });
+    }
+
+    const user = await get('SELECT id FROM users WHERE username = ?', [username.toLowerCase()]);
+    if (!user) return res.status(404).json({ error: 'Aucun compte avec ce pseudo' });
+
+    const hash = await bcrypt.hash(password, 10);
+    await run('UPDATE users SET password_hash = ? WHERE id = ?', [hash, user.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
