@@ -24,6 +24,9 @@ const state = {
 const app = document.getElementById('app');
 const pendingPredictions = new Map();
 const autoSaveTimers = new Map();
+let lockRefreshTimer = null;
+
+const LOCKED_STATUSES = new Set(['live', 'inprogress', 'finished', 'FT', 'ended']);
 
 function pickDisplayDuplicate(a, b) {
   if (a.prediction && !b.prediction) return a;
@@ -840,7 +843,7 @@ async function renderApp() {
   document.querySelectorAll('[data-nav]').forEach(btn => {
     btn.onclick = () => {
       pendingPredictions.clear();
-      updatePendingFab();
+      stopMatchLockRefresh();
       state.screen = btn.dataset.nav;
       renderApp();
     };
@@ -870,7 +873,7 @@ async function renderMatches(el) {
   pendingPredictions.clear();
   for (const timer of autoSaveTimers.values()) clearTimeout(timer);
   autoSaveTimers.clear();
-  updatePendingFab();
+  stopMatchLockRefresh();
   el.innerHTML = '<div class="empty-state">Chargement…</div>';
   try {
     const pendingScrollId = state.scrollToMatchId;
@@ -939,7 +942,7 @@ async function renderMatches(el) {
       input.addEventListener('change', onScoreInput);
     });
 
-    updatePendingFab();
+    startMatchLockRefresh();
 
     if (state.scrollToMatchId) {
       const id = state.scrollToMatchId;
@@ -976,7 +979,7 @@ function matchCardHtml(m, cc, logoMap) {
     bottomClass = '';
   }
 
-  return `<div class="match-card" data-match="${m.id}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
+  return `<div class="match-card${m.isLocked ? ' match-card-locked' : ''}" data-match="${m.id}" data-kickoff="${m.kickoff_at}" data-status="${m.status}" data-locked="${m.isLocked ? '1' : '0'}" data-home-score="${h}" data-away-score="${a}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
     <div class="match-top">
       <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${m.home_team_name}</span></div>
       <div class="score-mid">
@@ -993,6 +996,55 @@ function matchCardHtml(m, cc, logoMap) {
   </div>`;
 }
 
+function isCardLocked(card) {
+  if (card.dataset.locked === '1') return true;
+  const kickoff = card.dataset.kickoff;
+  if (!kickoff) return false;
+  return new Date(kickoff) <= new Date() || LOCKED_STATUSES.has(card.dataset.status ?? '');
+}
+
+function lockMatchCard(card) {
+  if (!isCardLocked(card)) return;
+
+  const matchId = Number(card.dataset.match);
+  clearAutoSaveTimer(matchId);
+  pendingPredictions.delete(matchId);
+  card.dataset.locked = '1';
+  card.classList.add('match-card-locked');
+  card.classList.remove('match-card-dirty');
+
+  const homeIn = card.querySelector('[data-side="home"]');
+  const awayIn = card.querySelector('[data-side="away"]');
+  const h = homeIn?.value || card.dataset.homeScore || '';
+  const a = awayIn?.value || card.dataset.awayScore || '';
+  card.dataset.homeScore = h;
+  card.dataset.awayScore = a;
+
+  card.querySelectorAll('.score-pill').forEach((pill, i) => {
+    pill.classList.remove('pending');
+    const val = i === 0 ? h : a;
+    pill.innerHTML = val !== '' ? val : '–';
+  });
+
+  const bottom = card.querySelector('.match-bottom');
+  if (bottom) {
+    bottom.textContent = h !== '' && a !== '' ? 'verrouillé' : 'verrouillé';
+    bottom.className = 'match-bottom locked-closed';
+  }
+}
+
+function startMatchLockRefresh() {
+  stopMatchLockRefresh();
+  const tick = () => document.querySelectorAll('.match-card[data-kickoff]').forEach(lockMatchCard);
+  tick();
+  lockRefreshTimer = setInterval(tick, 10000);
+}
+
+function stopMatchLockRefresh() {
+  if (lockRefreshTimer) clearInterval(lockRefreshTimer);
+  lockRefreshTimer = null;
+}
+
 function clearAutoSaveTimer(matchId) {
   const timer = autoSaveTimers.get(matchId);
   if (timer) clearTimeout(timer);
@@ -1002,6 +1054,7 @@ function clearAutoSaveTimer(matchId) {
 function onScoreInput(e) {
   const matchId = Number(e.target.dataset.match);
   const card = e.target.closest('.match-card');
+  if (isCardLocked(card)) return;
   const homeRaw = card.querySelector('[data-side="home"]').value;
   const awayRaw = card.querySelector('[data-side="away"]').value;
 
@@ -1010,7 +1063,6 @@ function onScoreInput(e) {
     pendingPredictions.delete(matchId);
     card.classList.remove('match-card-dirty');
     refreshCardScoreStyle(card);
-    updatePendingFab();
     return;
   }
 
@@ -1020,7 +1072,6 @@ function onScoreInput(e) {
   });
   card.classList.add('match-card-dirty');
   refreshCardScoreStyle(card);
-  updatePendingFab();
   scheduleAutoSave(matchId, card);
 }
 
@@ -1042,9 +1093,8 @@ async function saveMatchPrediction(matchId, card, { quiet = false } = {}) {
       homeScore: scores.home,
       awayScore: scores.away,
     });
-    markCardSaved(card);
+    markCardSaved(card, scores);
     if (!quiet) showToast('Pronostic enregistré ✓', 'success');
-    updatePendingFab();
     return true;
   } catch (err) {
     showToast(err.message, 'error');
@@ -1056,11 +1106,12 @@ function refreshCardScoreStyle(card) {
   const matchId = Number(card.dataset.match);
   const cc = { color: card.dataset.compColor, bg: card.dataset.compBg };
   const pending = pendingPredictions.get(matchId);
-  const filled = pending != null;
+  const hasSaved = card.dataset.homeScore !== '' && card.dataset.awayScore !== '';
+  const filled = pending != null || hasSaved;
 
   card.querySelectorAll('.score-pill').forEach(pill => {
     pill.classList.toggle('filled', filled);
-    pill.classList.toggle('pending', filled);
+    pill.classList.toggle('pending', pending != null);
     if (filled) {
       pill.style.color = cc.color;
       pill.style.borderColor = cc.color;
@@ -1074,60 +1125,30 @@ function refreshCardScoreStyle(card) {
 
   const bottom = card.querySelector('.match-bottom');
   if (bottom && bottom.classList.contains('open')) {
-    bottom.textContent = filled ? 'enregistrement…' : 'à toi de jouer';
+    if (pending != null) bottom.textContent = 'enregistrement…';
+    else if (hasSaved) bottom.textContent = 'enregistré ✓';
+    else bottom.textContent = 'à toi de jouer';
   }
 }
 
-function markCardSaved(card) {
+function markCardSaved(card, scores = null) {
   const matchId = Number(card.dataset.match);
+  const saved = scores ?? pendingPredictions.get(matchId);
   pendingPredictions.delete(matchId);
   card.classList.remove('match-card-dirty');
+  if (saved) {
+    card.dataset.homeScore = String(saved.home);
+    card.dataset.awayScore = String(saved.away);
+  }
   refreshCardScoreStyle(card);
   const bottom = card.querySelector('.match-bottom');
   if (bottom?.classList.contains('open')) {
     bottom.textContent = 'enregistré ✓';
     setTimeout(() => {
-      if (!pendingPredictions.has(matchId) && bottom.classList.contains('open')) {
+      if (!pendingPredictions.has(matchId) && bottom.classList.contains('open') && !isCardLocked(card)) {
         bottom.textContent = 'à toi de jouer';
       }
     }, 1800);
-  }
-}
-
-function updatePendingFab() {
-  document.getElementById('predictions-fab')?.remove();
-  if (pendingPredictions.size === 0 || state.screen !== 'matches') return;
-
-  const fab = document.createElement('button');
-  fab.id = 'predictions-fab';
-  fab.type = 'button';
-  fab.className = 'predictions-fab';
-  fab.textContent = `Valider tout (${pendingPredictions.size})`;
-  fab.onclick = saveAllPendingPredictions;
-  document.body.appendChild(fab);
-}
-
-async function saveAllPendingPredictions() {
-  const fab = document.getElementById('predictions-fab');
-  if (!fab || pendingPredictions.size === 0) return;
-
-  fab.disabled = true;
-  fab.textContent = 'Enregistrement…';
-
-  try {
-    const entries = [...pendingPredictions.entries()];
-    for (const [matchId] of entries) {
-      clearAutoSaveTimer(matchId);
-      const card = document.querySelector(`.match-card[data-match="${matchId}"]`);
-      if (card) await saveMatchPrediction(matchId, card, { quiet: true });
-    }
-
-    showToast(`${entries.length} pronostic${entries.length > 1 ? 's' : ''} enregistré${entries.length > 1 ? 's' : ''} ✓`, 'success');
-    updatePendingFab();
-  } catch (err) {
-    showToast(err.message, 'error');
-    fab.disabled = false;
-    fab.textContent = `Valider tout (${pendingPredictions.size})`;
   }
 }
 

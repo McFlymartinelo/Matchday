@@ -550,27 +550,7 @@ body.auth-page {
 .score-pill.filled { background: var(--l1-bg); color: var(--l1); border-color: var(--l1); }
 .score-pill.pending { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #6B3FD6) 35%, transparent); }
 .match-card-dirty .match-bottom.open { color: var(--accent, #6B3FD6); }
-
-.predictions-fab {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 92px;
-  z-index: 110;
-  max-width: calc(100% - 32px);
-  white-space: nowrap;
-  border: none;
-  border-radius: 999px;
-  padding: 14px 20px;
-  font-family: 'Baloo 2', sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  color: white;
-  background: linear-gradient(135deg, #6B3FD6, #8B5CF6);
-  box-shadow: 0 8px 24px color-mix(in srgb, #6B3FD6 45%, transparent);
-  cursor: pointer;
-}
-.predictions-fab:disabled { opacity: 0.7; cursor: wait; }
+.match-card-locked .score-pill input { pointer-events: none; }
 .match-bottom { text-align: center; margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--ink-soft); }
 .match-bottom.points { color: var(--l1); }
 .match-bottom.open { color: var(--serie); }

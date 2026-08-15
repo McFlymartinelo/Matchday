@@ -13,6 +13,12 @@ async function getGroupCompetitionIds(groupId) {
   return rows.map(r => r.competition_id);
 }
 
+const LOCKED_STATUSES = new Set(['live', 'inprogress', 'finished', 'FT', 'ended']);
+
+function isMatchLocked(match) {
+  return new Date(match.kickoff_at) <= new Date() || LOCKED_STATUSES.has(match.status);
+}
+
 router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, res) => {
   const compIds = await getGroupCompetitionIds(req.groupId);
   if (compIds.length === 0) return res.json([]);
@@ -66,11 +72,10 @@ router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, r
   );
 
   res.json(dedupeMatches(matches.map(m => {
-    const isLocked = new Date(m.kickoff_at) <= new Date() || ['live', 'finished', 'FT'].includes(m.status);
     return {
       ...m,
       prediction: predMap[m.id] ?? null,
-      isLocked,
+      isLocked: isMatchLocked(m),
       calendarClosed: !openCompIds.has(m.competition_id),
     };
   })).sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at)));
@@ -118,7 +123,7 @@ router.post('/:groupId/predictions', authRequired, groupMemberRequired, async (r
     return res.status(403).json({ error: 'Championnat non suivi' });
   }
 
-  if (new Date(match.kickoff_at) <= new Date()) {
+  if (isMatchLocked(match)) {
     return res.status(400).json({ error: 'Pronostic verrouillé — match déjà commencé' });
   }
 
