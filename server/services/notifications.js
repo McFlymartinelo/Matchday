@@ -3,6 +3,18 @@ import { all, get, run } from '../db/connection.js';
 
 const REMINDER_MINUTES = Number(process.env.NOTIFICATION_REMINDER_MINUTES ?? 60);
 const WINDOW_MINUTES = Number(process.env.NOTIFICATION_WINDOW_MINUTES ?? 5);
+const MORNING_TZ = process.env.NOTIFICATION_MORNING_TZ?.trim() || 'Europe/Paris';
+
+export function getParisCalendarDay(date = new Date()) {
+  return date.toLocaleDateString('en-CA', { timeZone: MORNING_TZ });
+}
+
+function parseDbDate(value) {
+  if (!value) return null;
+  const raw = String(value);
+  if (raw.includes('T')) return new Date(raw);
+  return new Date(`${raw.replace(' ', 'T')}Z`);
+}
 
 let vapidConfigured = false;
 
@@ -66,6 +78,10 @@ export async function findPendingReminderTargets(options = {}) {
   if (options.userId) {
     sql += ' AND gm.user_id = ?';
     params.push(options.userId);
+  }
+  if (options.groupId) {
+    sql += ' AND g.id = ?';
+    params.push(options.groupId);
   }
 
   return all(sql, params);
@@ -134,7 +150,7 @@ export async function sendPushToUser(userId, payload) {
 export async function sendTestPush(userId) {
   return sendPushToUser(userId, {
     title: '🔔 Matchday — test',
-    body: 'Les notifications fonctionnent ! Tu seras prévenu 1h avant chaque match.',
+    body: 'Les notifications fonctionnent ! Rappel le matin + 1h avant chaque match.',
     url: '/?screen=matches',
     tag: `test-${Date.now()}`,
   });
@@ -180,6 +196,125 @@ export async function sendPredictionReminders(options = {}) {
       `INSERT INTO notification_log (user_id, match_id, type) VALUES (?, ?, 'prono_reminder')`,
       [t.user_id, t.match_id]
     );
+    results.push({ ...t, push, payload });
+  }
+
+  return { count: targets.length, results };
+}
+
+/**
+ * Matchs du jour (fuseau Paris) sans pronostic — rappel matinal groupé par ligue.
+ */
+export async function findMorningReminderTargets(options = {}) {
+  const todayParis = options.day ?? getParisCalendarDay();
+
+  let sql = `
+    SELECT m.id AS match_id, m.competition_id, m.home_team_name, m.away_team_name, m.kickoff_at,
+           gm.user_id, g.id AS group_id, g.name AS group_name, c.nom AS comp_nom
+    FROM matches m
+    JOIN competitions c ON c.id = m.competition_id
+    JOIN group_competitions gc ON gc.competition_id = m.competition_id
+    JOIN groups g ON g.id = gc.group_id
+    JOIN group_members gm ON gm.group_id = g.id
+    LEFT JOIN predictions p ON p.match_id = m.id AND p.user_id = gm.user_id AND p.group_id = g.id
+    WHERE m.status IN ('scheduled', 'notstarted')
+      AND datetime(m.kickoff_at) > datetime('now')
+      AND p.id IS NULL
+  `;
+  const params = [];
+  if (options.userId) {
+    sql += ' AND gm.user_id = ?';
+    params.push(options.userId);
+  }
+  if (options.groupId) {
+    sql += ' AND g.id = ?';
+    params.push(options.groupId);
+  }
+
+  const rows = await all(sql, params);
+  const todayRows = rows.filter(r => getParisCalendarDay(new Date(r.kickoff_at)) === todayParis);
+
+  const grouped = new Map();
+  for (const row of todayRows) {
+    const key = `${row.user_id}:${row.group_id}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
+
+  const targets = [];
+  for (const matches of grouped.values()) {
+    matches.sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at));
+    const first = matches[0];
+    if (!options.skipDedup) {
+      const alreadySent = await hasMorningReminderForMatches(first.user_id, matches, todayParis);
+      if (alreadySent) continue;
+    }
+    targets.push({
+      user_id: first.user_id,
+      group_id: first.group_id,
+      group_name: first.group_name,
+      pendingCount: matches.length,
+      match_id: first.match_id,
+      competition_id: first.competition_id,
+      kickoff_at: first.kickoff_at,
+      home_team_name: first.home_team_name,
+      away_team_name: first.away_team_name,
+      match_ids: matches.map(m => m.match_id),
+    });
+  }
+
+  return targets;
+}
+
+async function hasMorningReminderForMatches(userId, matches, dayParis) {
+  if (!matches.length) return false;
+  const placeholders = matches.map(() => '?').join(',');
+  const rows = await all(
+    `SELECT sent_at FROM notification_log
+     WHERE user_id = ? AND type = 'prono_morning' AND match_id IN (${placeholders})`,
+    [userId, ...matches.map(m => m.match_id)]
+  );
+  return rows.some(r => getParisCalendarDay(parseDbDate(r.sent_at)) === dayParis);
+}
+
+export function buildMorningReminderPayload(target) {
+  const count = target.pendingCount ?? 1;
+  const body = count === 1
+    ? `${target.home_team_name} vs ${target.away_team_name} ce soir (${target.group_name})`
+    : `${count} matchs à pronostiquer aujourd'hui (${target.group_name})`;
+
+  return {
+    title: '☀️ Pronostics du jour',
+    body,
+    url: buildMatchDeepLink(target),
+    matchId: target.match_id,
+    groupId: target.group_id,
+    competitionId: target.competition_id,
+    tag: `morning-${target.group_id}-${getParisCalendarDay()}`,
+  };
+}
+
+export async function sendMorningReminders(options = {}) {
+  const targets = await findMorningReminderTargets(options);
+  const results = [];
+
+  for (const t of targets) {
+    const payload = buildMorningReminderPayload(t);
+
+    if (options.dryRun) {
+      results.push({ ...t, payload, dryRun: true });
+      continue;
+    }
+
+    const push = await sendPushToUser(t.user_id, payload);
+    if (push.sent > 0) {
+      for (const matchId of t.match_ids) {
+        await run(
+          `INSERT INTO notification_log (user_id, match_id, type) VALUES (?, ?, 'prono_morning')`,
+          [t.user_id, matchId]
+        );
+      }
+    }
     results.push({ ...t, push, payload });
   }
 

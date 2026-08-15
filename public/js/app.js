@@ -22,6 +22,7 @@ const state = {
 };
 
 const app = document.getElementById('app');
+const pendingPredictions = new Map();
 
 export async function init() {
   if (!auth.isLoggedIn()) {
@@ -820,7 +821,12 @@ async function renderApp() {
   </div>${navHtml()}`;
 
   document.querySelectorAll('[data-nav]').forEach(btn => {
-    btn.onclick = () => { state.screen = btn.dataset.nav; renderApp(); };
+    btn.onclick = () => {
+      pendingPredictions.clear();
+      updatePendingFab();
+      state.screen = btn.dataset.nav;
+      renderApp();
+    };
   });
   document.querySelectorAll('[data-comp]').forEach(btn => {
     btn.onclick = () => { setActiveComp(btn.dataset.comp); renderApp(); };
@@ -844,6 +850,8 @@ async function renderApp() {
 }
 
 async function renderMatches(el) {
+  pendingPredictions.clear();
+  updatePendingFab();
   el.innerHTML = '<div class="empty-state">Chargement…</div>';
   try {
     const pendingScrollId = state.scrollToMatchId;
@@ -907,8 +915,10 @@ async function renderMatches(el) {
     }).join('')}`;
 
     el.querySelectorAll('.score-pill input').forEach(input => {
-      input.addEventListener('change', onScoreChange);
+      input.addEventListener('input', onScoreInput);
     });
+
+    updatePendingFab();
 
     if (state.scrollToMatchId) {
       const id = state.scrollToMatchId;
@@ -945,7 +955,7 @@ function matchCardHtml(m, cc, logoMap) {
     bottomClass = '';
   }
 
-  return `<div class="match-card" data-match="${m.id}">
+  return `<div class="match-card" data-match="${m.id}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
     <div class="match-top">
       <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${m.home_team_name}</span></div>
       <div class="score-mid">
@@ -962,18 +972,112 @@ function matchCardHtml(m, cc, logoMap) {
   </div>`;
 }
 
-async function onScoreChange(e) {
+function onScoreInput(e) {
   const matchId = Number(e.target.dataset.match);
   const card = e.target.closest('.match-card');
-  const home = card.querySelector('[data-side="home"]').value;
-  const away = card.querySelector('[data-side="away"]').value;
-  if (home === '' || away === '') return;
+  const homeRaw = card.querySelector('[data-side="home"]').value;
+  const awayRaw = card.querySelector('[data-side="away"]').value;
+
+  if (homeRaw === '' || awayRaw === '') {
+    pendingPredictions.delete(matchId);
+    card.classList.remove('match-card-dirty');
+    refreshCardScoreStyle(card);
+    updatePendingFab();
+    return;
+  }
+
+  pendingPredictions.set(matchId, {
+    home: Number(homeRaw),
+    away: Number(awayRaw),
+  });
+  card.classList.add('match-card-dirty');
+  refreshCardScoreStyle(card);
+  updatePendingFab();
+}
+
+function refreshCardScoreStyle(card) {
+  const matchId = Number(card.dataset.match);
+  const cc = { color: card.dataset.compColor, bg: card.dataset.compBg };
+  const pending = pendingPredictions.get(matchId);
+  const filled = pending != null;
+
+  card.querySelectorAll('.score-pill').forEach(pill => {
+    pill.classList.toggle('filled', filled);
+    pill.classList.toggle('pending', filled);
+    if (filled) {
+      pill.style.color = cc.color;
+      pill.style.borderColor = cc.color;
+      pill.style.background = cc.bg;
+    } else {
+      pill.style.color = '';
+      pill.style.borderColor = '';
+      pill.style.background = '';
+    }
+  });
+
+  const bottom = card.querySelector('.match-bottom');
+  if (bottom && bottom.classList.contains('open')) {
+    bottom.textContent = filled ? 'à valider' : 'à toi de jouer';
+  }
+}
+
+function markCardSaved(card) {
+  const matchId = Number(card.dataset.match);
+  pendingPredictions.delete(matchId);
+  card.classList.remove('match-card-dirty');
+  refreshCardScoreStyle(card);
+  const bottom = card.querySelector('.match-bottom');
+  if (bottom?.classList.contains('open')) {
+    bottom.textContent = 'enregistré ✓';
+    setTimeout(() => {
+      if (!pendingPredictions.has(matchId) && bottom.classList.contains('open')) {
+        bottom.textContent = 'à toi de jouer';
+      }
+    }, 1800);
+  }
+}
+
+function updatePendingFab() {
+  document.getElementById('predictions-fab')?.remove();
+  if (pendingPredictions.size === 0 || state.screen !== 'matches') return;
+
+  const fab = document.createElement('button');
+  fab.id = 'predictions-fab';
+  fab.type = 'button';
+  fab.className = 'predictions-fab';
+  fab.textContent = `Valider (${pendingPredictions.size})`;
+  fab.onclick = saveAllPendingPredictions;
+  document.querySelector('.app-shell')?.appendChild(fab);
+}
+
+async function saveAllPendingPredictions() {
+  const fab = document.getElementById('predictions-fab');
+  if (!fab || pendingPredictions.size === 0) return;
+
+  fab.disabled = true;
+  fab.textContent = 'Enregistrement…';
+
   try {
-    await matches.predict(state.group.id, { matchId, homeScore: Number(home), awayScore: Number(away) });
-    showToast('Pronostic enregistré ✓', 'success');
-    renderApp();
+    const entries = [...pendingPredictions.entries()];
+    await Promise.all(entries.map(([matchId, scores]) =>
+      matches.predict(state.group.id, {
+        matchId,
+        homeScore: scores.home,
+        awayScore: scores.away,
+      })
+    ));
+
+    for (const [matchId] of entries) {
+      const card = document.querySelector(`.match-card[data-match="${matchId}"]`);
+      if (card) markCardSaved(card);
+    }
+
+    showToast(`${entries.length} pronostic${entries.length > 1 ? 's' : ''} enregistré${entries.length > 1 ? 's' : ''} ✓`, 'success');
+    updatePendingFab();
   } catch (err) {
     showToast(err.message, 'error');
+    fab.disabled = false;
+    fab.textContent = `Valider (${pendingPredictions.size})`;
   }
 }
 

@@ -1,6 +1,7 @@
 import { all, get, run } from '../db/connection.js';
 import * as bsd from './bsd.js';
 import { computeMatchdayXi, computeSeasonXiBonus } from '../lib/scoring.js';
+import { dedupeBsdEvents, dedupeCompetitionMatches } from '../lib/matches.js';
 
 /** Mappe les IDs BSD réels depuis l'API (remplace les anciens IDs API-Football). */
 export async function syncLeagueIds() {
@@ -65,11 +66,9 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
     }
 
     let count = 0;
-    for (const event of events) {
-      const norm = bsd.normalizeEvent(event, competitionId);
-      if (!norm.kickoff_at) continue;
+    const normalized = dedupeBsdEvents(events, competitionId, bsd.normalizeEvent);
+    for (const norm of normalized) {
       const matchSeason = bsd.seasonLabelFromKickoff(norm.kickoff_at);
-
       await run(
         `INSERT INTO matches (bsd_event_id, competition_id, home_team_name, away_team_name,
           home_bsd_team_id, away_bsd_team_id, home_score, away_score, status, matchday, kickoff_at, season, updated_at)
@@ -88,6 +87,10 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
     }
 
     if (count > 0) {
+      const merged = await dedupeCompetitionMatches(competitionId);
+      if (merged > 0) {
+        await logSync('fixtures', 'ok', `${merged} doublon(s) fusionné(s) ligue ${bsdLeagueId}`);
+      }
       await run(
         `DELETE FROM matches WHERE competition_id = ? AND bsd_event_id IS NOT NULL AND bsd_event_id < 0`,
         [competitionId]

@@ -5,8 +5,9 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { migrate } from './db/connection.js';
 import { seedCompetitions, seedDemoMatches } from './db/seed.js';
-import { get } from './db/connection.js';
+import { get, all } from './db/connection.js';
 import { syncAllCompetitions, syncAllStandings, syncLiveScores, syncLeagueIds, cleanupTestMatches } from './services/sync.js';
+import { dedupeCompetitionMatches } from './lib/matches.js';
 
 import authRoutes from './routes/auth.js';
 import groupRoutes from './routes/groups.js';
@@ -17,7 +18,7 @@ import specialBetsRoutes from './routes/specialBets.js';
 import chatRoutes from './routes/chat.js';
 import adminRoutes from './routes/admin.js';
 import notificationRoutes from './routes/notifications.js';
-import { sendPredictionReminders, configureWebPush } from './services/notifications.js';
+import { sendPredictionReminders, sendMorningReminders, configureWebPush } from './services/notifications.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -93,6 +94,15 @@ function scheduleJobs() {
   cron.schedule('*/5 * * * *', () => {
     sendPredictionReminders().catch(err => console.error('Rappels push:', err.message));
   });
+
+  const morningEnabled = process.env.NOTIFICATION_MORNING_ENABLED !== 'false';
+  const morningHour = Number(process.env.NOTIFICATION_MORNING_HOUR ?? 8);
+  const morningTz = process.env.NOTIFICATION_MORNING_TZ?.trim() || 'Europe/Paris';
+  if (morningEnabled) {
+    cron.schedule(`0 ${morningHour} * * *`, () => {
+      sendMorningReminders().catch(err => console.error('Rappels matin:', err.message));
+    }, { timezone: morningTz });
+  }
 }
 
 async function initData() {
@@ -116,6 +126,13 @@ async function initData() {
     await seedDemoMatches();
     console.log('Matchs de démo chargés (BSD indisponible ou vide)');
   }
+
+  const comps = await all('SELECT id FROM competitions');
+  let deduped = 0;
+  for (const c of comps) {
+    deduped += await dedupeCompetitionMatches(c.id);
+  }
+  if (deduped > 0) console.log(`Doublons matchs fusionnés au démarrage : ${deduped}`);
 }
 
 async function start() {

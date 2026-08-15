@@ -7,6 +7,7 @@ import {
   removePushSubscription,
   removeAllPushSubscriptions,
   sendPredictionReminders,
+  sendMorningReminders,
   sendTestPush,
 } from '../services/notifications.js';
 
@@ -62,14 +63,25 @@ router.post('/unsubscribe', authRequired, async (req, res) => {
 /** Déclenche manuellement la vérification des rappels (dev / test). */
 router.post('/trigger-reminders', authRequired, async (req, res) => {
   const dryRun = req.body?.dryRun === true;
-  const result = await sendPredictionReminders({
+  const kind = req.body?.kind === 'morning' ? 'morning' : 'hour';
+  const common = {
     dryRun,
-    minutes: req.body?.minutes,
-    windowMinutes: req.body?.windowMinutes,
     userId: req.user.id,
     matchId: req.body?.matchId,
-  });
-  res.json(result);
+    groupId: req.body?.groupId,
+    skipDedup: req.body?.skipDedup === true,
+    day: req.body?.day,
+  };
+
+  const result = kind === 'morning'
+    ? await sendMorningReminders(common)
+    : await sendPredictionReminders({
+      ...common,
+      minutes: req.body?.minutes,
+      windowMinutes: req.body?.windowMinutes,
+    });
+
+  res.json({ kind, ...result });
 });
 
 export default router;

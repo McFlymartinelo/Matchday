@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { all, get, run } from '../db/connection.js';
 import { authRequired, groupMemberRequired } from '../middleware/auth.js';
 import { filterMatchesByGroupCompetitions } from '../lib/scoring.js';
+import { dedupeMatches } from '../lib/matches.js';
 import { scorePrediction } from '../lib/scoring.js';
 import * as bsd from '../services/bsd.js';
 
@@ -64,7 +65,7 @@ router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, r
       .map(m => m.competition_id)
   );
 
-  res.json(matches.map(m => {
+  res.json(dedupeMatches(matches.map(m => {
     const isLocked = new Date(m.kickoff_at) <= new Date() || ['live', 'finished', 'FT'].includes(m.status);
     return {
       ...m,
@@ -72,7 +73,7 @@ router.get('/:groupId/matches', authRequired, groupMemberRequired, async (req, r
       isLocked,
       calendarClosed: !openCompIds.has(m.competition_id),
     };
-  }));
+  })).sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at)));
 });
 
 router.get('/:groupId/matches/:matchId', authRequired, groupMemberRequired, async (req, res) => {

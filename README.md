@@ -38,11 +38,14 @@ Ouvrir http://localhost:3000
 npm test
 ```
 
-### Tester les notifications (rappel 1h avant match)
+### Tester les notifications (rappel matin + 1h avant match)
 
 1. Génère les clés VAPID si besoin : `npm run vapid:keys` → copie dans `.env`
 2. Lance l'app, connecte-toi, active la cloche 🔔 (abonnement push)
-3. Simulation (sans envoi) :
+3. Rappels automatiques :
+   - **Matin** (8h Paris par défaut) : matchs du jour sans pronostic
+   - **~1h avant** le coup d'envoi : rappel par match
+4. Simulation (sans envoi) :
 
 ```bash
 npm run test:notifications -- --list
@@ -86,7 +89,7 @@ Content-Type: application/json
 - Mon 11 de saison avec équipe type calculée via BSD
 - Classement, chat, stats, PWA installable
 - Sync automatique BSD (fixtures, scores, classements)
-- Rappels pronostic (~1 h avant le match)
+- Rappels pronostic (matin des journées + ~1 h avant le match)
 
 ## Déploiement sur Render
 
