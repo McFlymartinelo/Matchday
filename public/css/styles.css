@@ -553,9 +553,12 @@ body.auth-page {
 
 .predictions-fab {
   position: fixed;
-  right: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 92px;
   z-index: 110;
+  max-width: calc(100% - 32px);
+  white-space: nowrap;
   border: none;
   border-radius: 999px;
   padding: 14px 20px;

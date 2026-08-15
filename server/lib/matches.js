@@ -4,15 +4,8 @@ import { normalizeTeamName } from '../services/bsd.js';
 export function buildFixtureKey(match) {
   const home = match.home_bsd_team_id ?? normalizeTeamName(match.home_team_name);
   const away = match.away_bsd_team_id ?? normalizeTeamName(match.away_team_name);
-  const kickoff = normalizeKickoffKey(match.kickoff_at);
-  return `${match.competition_id}|${match.matchday ?? ''}|${home}|${away}|${kickoff}`;
-}
-
-function normalizeKickoffKey(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16);
-  return d.toISOString().slice(0, 16);
+  // Même journée + mêmes équipes = un seul match (BSD peut dupliquer avec kickoff légèrement différent).
+  return `${match.competition_id}|${match.matchday ?? ''}|${home}|${away}`;
 }
 
 function pickBestDuplicate(a, b) {

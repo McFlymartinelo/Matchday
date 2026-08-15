@@ -36,6 +36,33 @@ describe('dedupeMatches', () => {
     assert.ok(rows[0].prediction);
   });
 
+  it('fusionne même affiche avec kickoff différent', () => {
+    const rows = dedupeMatches([
+      {
+        id: 20,
+        competition_id: 3,
+        matchday: 1,
+        home_team_name: 'Celta Vigo',
+        away_team_name: 'Osasuna',
+        home_bsd_team_id: 101,
+        away_bsd_team_id: 102,
+        kickoff_at: '2026-08-22T17:00:00.000Z',
+      },
+      {
+        id: 21,
+        competition_id: 3,
+        matchday: 1,
+        home_team_name: 'Celta Vigo',
+        away_team_name: 'Osasuna',
+        home_bsd_team_id: 101,
+        away_bsd_team_id: 102,
+        kickoff_at: '2026-08-22T17:30:00.000Z',
+      },
+    ]);
+
+    assert.equal(rows.length, 1);
+  });
+
   it('conserve deux affiches différentes', () => {
     const rows = dedupeMatches([
       {

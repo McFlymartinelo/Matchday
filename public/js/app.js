@@ -23,6 +23,23 @@ const state = {
 
 const app = document.getElementById('app');
 const pendingPredictions = new Map();
+const autoSaveTimers = new Map();
+
+function pickDisplayDuplicate(a, b) {
+  if (a.prediction && !b.prediction) return a;
+  if (b.prediction && !a.prediction) return b;
+  return a.id < b.id ? a : b;
+}
+
+function dedupeMatchesForDisplay(list) {
+  const byKey = new Map();
+  for (const m of list) {
+    const key = `${m.competition_id}|${m.matchday ?? ''}|${normTeamName(m.home_team_name)}|${normTeamName(m.away_team_name)}`;
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? pickDisplayDuplicate(existing, m) : m);
+  }
+  return [...byKey.values()];
+}
 
 export async function init() {
   if (!auth.isLoggedIn()) {
@@ -851,6 +868,8 @@ async function renderApp() {
 
 async function renderMatches(el) {
   pendingPredictions.clear();
+  for (const timer of autoSaveTimers.values()) clearTimeout(timer);
+  autoSaveTimers.clear();
   updatePendingFab();
   el.innerHTML = '<div class="empty-state">Chargement…</div>';
   try {
@@ -858,10 +877,11 @@ async function renderMatches(el) {
     if (pendingScrollId) await ensureMatchVisible(pendingScrollId);
 
     const params = state.activeComp ? { competitionId: state.activeComp } : {};
-    const [matchList, logoMap] = await Promise.all([
+    const [rawList, logoMap] = await Promise.all([
       matches.list(state.group.id, params),
       buildTeamLogoMap(state.group.id),
     ]);
+    const matchList = dedupeMatchesForDisplay(rawList);
 
     if (!matchList.length) {
       el.innerHTML = `<div class="section-card"><div class="empty-state">Aucun calendrier disponible pour ce championnat.<br>La sync BSD se fait toutes les 6h.</div></div>`;
@@ -916,6 +936,7 @@ async function renderMatches(el) {
 
     el.querySelectorAll('.score-pill input').forEach(input => {
       input.addEventListener('input', onScoreInput);
+      input.addEventListener('change', onScoreInput);
     });
 
     updatePendingFab();
@@ -972,6 +993,12 @@ function matchCardHtml(m, cc, logoMap) {
   </div>`;
 }
 
+function clearAutoSaveTimer(matchId) {
+  const timer = autoSaveTimers.get(matchId);
+  if (timer) clearTimeout(timer);
+  autoSaveTimers.delete(matchId);
+}
+
 function onScoreInput(e) {
   const matchId = Number(e.target.dataset.match);
   const card = e.target.closest('.match-card');
@@ -979,6 +1006,7 @@ function onScoreInput(e) {
   const awayRaw = card.querySelector('[data-side="away"]').value;
 
   if (homeRaw === '' || awayRaw === '') {
+    clearAutoSaveTimer(matchId);
     pendingPredictions.delete(matchId);
     card.classList.remove('match-card-dirty');
     refreshCardScoreStyle(card);
@@ -993,6 +1021,35 @@ function onScoreInput(e) {
   card.classList.add('match-card-dirty');
   refreshCardScoreStyle(card);
   updatePendingFab();
+  scheduleAutoSave(matchId, card);
+}
+
+function scheduleAutoSave(matchId, card) {
+  clearAutoSaveTimer(matchId);
+  autoSaveTimers.set(matchId, setTimeout(() => {
+    autoSaveTimers.delete(matchId);
+    saveMatchPrediction(matchId, card, { quiet: true });
+  }, 700));
+}
+
+async function saveMatchPrediction(matchId, card, { quiet = false } = {}) {
+  const scores = pendingPredictions.get(matchId);
+  if (!scores) return true;
+
+  try {
+    await matches.predict(state.group.id, {
+      matchId,
+      homeScore: scores.home,
+      awayScore: scores.away,
+    });
+    markCardSaved(card);
+    if (!quiet) showToast('Pronostic enregistré ✓', 'success');
+    updatePendingFab();
+    return true;
+  } catch (err) {
+    showToast(err.message, 'error');
+    return false;
+  }
 }
 
 function refreshCardScoreStyle(card) {
@@ -1017,7 +1074,7 @@ function refreshCardScoreStyle(card) {
 
   const bottom = card.querySelector('.match-bottom');
   if (bottom && bottom.classList.contains('open')) {
-    bottom.textContent = filled ? 'à valider' : 'à toi de jouer';
+    bottom.textContent = filled ? 'enregistrement…' : 'à toi de jouer';
   }
 }
 
@@ -1045,9 +1102,9 @@ function updatePendingFab() {
   fab.id = 'predictions-fab';
   fab.type = 'button';
   fab.className = 'predictions-fab';
-  fab.textContent = `Valider (${pendingPredictions.size})`;
+  fab.textContent = `Valider tout (${pendingPredictions.size})`;
   fab.onclick = saveAllPendingPredictions;
-  document.querySelector('.app-shell')?.appendChild(fab);
+  document.body.appendChild(fab);
 }
 
 async function saveAllPendingPredictions() {
@@ -1059,17 +1116,10 @@ async function saveAllPendingPredictions() {
 
   try {
     const entries = [...pendingPredictions.entries()];
-    await Promise.all(entries.map(([matchId, scores]) =>
-      matches.predict(state.group.id, {
-        matchId,
-        homeScore: scores.home,
-        awayScore: scores.away,
-      })
-    ));
-
     for (const [matchId] of entries) {
+      clearAutoSaveTimer(matchId);
       const card = document.querySelector(`.match-card[data-match="${matchId}"]`);
-      if (card) markCardSaved(card);
+      if (card) await saveMatchPrediction(matchId, card, { quiet: true });
     }
 
     showToast(`${entries.length} pronostic${entries.length > 1 ? 's' : ''} enregistré${entries.length > 1 ? 's' : ''} ✓`, 'success');
@@ -1077,7 +1127,7 @@ async function saveAllPendingPredictions() {
   } catch (err) {
     showToast(err.message, 'error');
     fab.disabled = false;
-    fab.textContent = `Valider (${pendingPredictions.size})`;
+    fab.textContent = `Valider tout (${pendingPredictions.size})`;
   }
 }
 
