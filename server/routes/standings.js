@@ -8,35 +8,66 @@ const router = Router();
 const ACTIVE_SEASON_MATCH = `m.season = (SELECT saison_active FROM competitions WHERE id = m.competition_id)`;
 const ACTIVE_SEASON_SPECIAL = `sb.season = (SELECT saison_active FROM competitions WHERE id = sb.competition_id)`;
 const ACTIVE_SEASON_XI = `sx.season = (SELECT saison_active FROM competitions WHERE id = sx.competition_id)`;
+const FINISHED_STATUSES = `('finished', 'FT', 'ended')`;
+
+function buildMatchFilter(competitionId, compIds) {
+  if (competitionId) {
+    return { sql: ' AND m.competition_id = ?', params: [Number(competitionId)] };
+  }
+  if (compIds.length) {
+    return {
+      sql: ` AND m.competition_id IN (${compIds.map(() => '?').join(',')})`,
+      params: [...compIds],
+    };
+  }
+  return { sql: '', params: [] };
+}
+
+/** Pronos notés : saison active du championnat + match terminé uniquement. */
+function scoredPredictionsJoin(matchFilterSql, groupId) {
+  return `
+    LEFT JOIN (
+      SELECT p.user_id,
+             COALESCE(SUM(p.points), 0) AS pred_points,
+             COALESCE(SUM(CASE WHEN p.points_detail = 'exact' THEN 1 END), 0) AS exact_count,
+             COALESCE(SUM(CASE WHEN p.points_detail = 'diff' THEN 1 END), 0) AS diff_count,
+             COALESCE(SUM(CASE WHEN p.points_detail = 'winner' THEN 1 END), 0) AS winner_count,
+             COALESCE(SUM(CASE WHEN p.points_detail = 'miss' THEN 1 END), 0) AS miss_count,
+             COUNT(CASE WHEN p.points IS NOT NULL THEN 1 END) AS scored_count
+      FROM predictions p
+      INNER JOIN matches m ON m.id = p.match_id
+        AND ${ACTIVE_SEASON_MATCH}
+        AND m.status IN ${FINISHED_STATUSES}
+        ${matchFilterSql}
+      WHERE p.group_id = ?
+      GROUP BY p.user_id
+    ) pred ON pred.user_id = u.id`;
+}
 
 router.get('/:groupId/standings', authRequired, groupMemberRequired, async (req, res) => {
   const { competitionId } = req.query;
   const compIds = (await all('SELECT competition_id FROM group_competitions WHERE group_id = ?', [req.groupId]))
     .map(r => r.competition_id);
 
-  let matchFilter = '';
-  const baseParams = [req.groupId, req.groupId];
-  if (competitionId) {
-    matchFilter = ' AND m.competition_id = ?';
-    baseParams.push(Number(competitionId));
-  } else if (compIds.length) {
-    matchFilter = ` AND m.competition_id IN (${compIds.map(() => '?').join(',')})`;
-    baseParams.push(...compIds);
-  }
+  const { sql: matchFilter, params: matchParams } = buildMatchFilter(
+    competitionId ? Number(competitionId) : null,
+    compIds
+  );
 
   const rows = await all(
     `SELECT u.id, u.display_name, u.avatar, u.profile_color,
-            COALESCE(SUM(p.points), 0) as pred_points,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'exact' THEN 1 ELSE 0 END), 0) as exact_count,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'diff' THEN 1 ELSE 0 END), 0) as diff_count,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'winner' THEN 1 ELSE 0 END), 0) as winner_count
+            COALESCE(pred.pred_points, 0) as pred_points,
+            COALESCE(pred.exact_count, 0) as exact_count,
+            COALESCE(pred.diff_count, 0) as diff_count,
+            COALESCE(pred.winner_count, 0) as winner_count,
+            COALESCE(pred.miss_count, 0) as miss_count,
+            COALESCE(pred.scored_count, 0) as scored_count
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
-     LEFT JOIN predictions p ON p.user_id = u.id AND p.group_id = ?
-     LEFT JOIN matches m ON m.id = p.match_id AND ${ACTIVE_SEASON_MATCH} ${matchFilter}
+     ${scoredPredictionsJoin(matchFilter, req.groupId)}
      GROUP BY u.id
      ORDER BY pred_points DESC`,
-    baseParams
+    [req.groupId, ...matchParams, req.groupId]
   );
 
   const bonusRows = await all(
@@ -53,24 +84,10 @@ router.get('/:groupId/standings', authRequired, groupMemberRequired, async (req,
   );
   const specialMap = Object.fromEntries(specialRows.map(s => [s.user_id, s.special_points]));
 
-  const missRows = await all(
-    `SELECT u.id as user_id,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'miss' THEN 1 ELSE 0 END), 0) as miss_count,
-            COUNT(CASE WHEN p.points IS NOT NULL THEN 1 END) as scored_count
-     FROM users u
-     JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
-     LEFT JOIN predictions p ON p.user_id = u.id AND p.group_id = ?
-     LEFT JOIN matches m ON m.id = p.match_id AND ${ACTIVE_SEASON_MATCH} ${matchFilter}
-     GROUP BY u.id`,
-    baseParams
-  );
-  const missMap = Object.fromEntries(missRows.map(r => [r.user_id, r]));
-
   res.json(rows.map((r, i) => {
     const specialPoints = specialMap[r.id] ?? 0;
-    const missInfo = missMap[r.id] ?? {};
-    const scoredCount = Number(missInfo.scored_count ?? 0);
-    const missCount = Number(missInfo.miss_count ?? 0);
+    const scoredCount = Number(r.scored_count ?? 0);
+    const missCount = Number(r.miss_count ?? 0);
     const hitCount = r.exact_count + r.diff_count + r.winner_count;
     const precision = scoredCount > 0 ? Math.round((hitCount / scoredCount) * 100) : 0;
     const avgPerMatch = scoredCount > 0 ? Number((r.pred_points / scoredCount).toFixed(2)) : 0;
@@ -99,11 +116,15 @@ router.get('/:groupId/standings/matchday/:matchday', authRequired, groupMemberRe
   const { competitionId } = req.query;
   const matchday = Number(req.params.matchday);
 
-  let sql = `SELECT u.id, u.display_name, u.avatar, COALESCE(SUM(p.points), 0) as points
+  let sql = `SELECT u.id, u.display_name, u.avatar,
+             COALESCE(SUM(CASE WHEN m.id IS NOT NULL THEN p.points ELSE 0 END), 0) as points
              FROM users u
              JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
              LEFT JOIN predictions p ON p.user_id = u.id AND p.group_id = ?
-             LEFT JOIN matches m ON m.id = p.match_id AND m.matchday = ? AND ${ACTIVE_SEASON_MATCH}`;
+             LEFT JOIN matches m ON m.id = p.match_id
+               AND m.matchday = ?
+               AND ${ACTIVE_SEASON_MATCH}
+               AND m.status IN ${FINISHED_STATUSES}`;
   const params = [req.groupId, req.groupId, matchday];
   if (competitionId) { sql += ' AND m.competition_id = ?'; params.push(Number(competitionId)); }
   sql += ' GROUP BY u.id ORDER BY points DESC';
@@ -174,6 +195,7 @@ router.get('/:groupId/stats', authRequired, groupMemberRequired, async (req, res
     `SELECT m.matchday, m.competition_id, SUM(p.points) as points, m.kickoff_at
      FROM predictions p JOIN matches m ON m.id = p.match_id AND ${ACTIVE_SEASON_MATCH}
      WHERE p.user_id = ? AND p.group_id = ? AND p.points IS NOT NULL
+       AND m.status IN ${FINISHED_STATUSES}
      GROUP BY m.matchday, m.competition_id ORDER BY m.kickoff_at`,
     [userId, req.groupId]
   );
@@ -198,19 +220,17 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
 
   const membersRaw = await all(
     `SELECT u.id, u.display_name, u.avatar, u.profile_color,
-            COALESCE(SUM(p.points), 0) as pred_points,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'exact' THEN 1 ELSE 0 END), 0) as exact_count,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'diff' THEN 1 ELSE 0 END), 0) as diff_count,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'winner' THEN 1 ELSE 0 END), 0) as winner_count,
-            COALESCE(SUM(CASE WHEN p.points_detail = 'miss' THEN 1 ELSE 0 END), 0) as miss_count,
-            COUNT(CASE WHEN p.points IS NOT NULL THEN 1 END) as scored_count
+            COALESCE(pred.pred_points, 0) as pred_points,
+            COALESCE(pred.exact_count, 0) as exact_count,
+            COALESCE(pred.diff_count, 0) as diff_count,
+            COALESCE(pred.winner_count, 0) as winner_count,
+            COALESCE(pred.miss_count, 0) as miss_count,
+            COALESCE(pred.scored_count, 0) as scored_count
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
-     LEFT JOIN predictions p ON p.user_id = u.id AND p.group_id = ?
-     LEFT JOIN matches m ON m.id = p.match_id AND ${ACTIVE_SEASON_MATCH}
-       AND m.status IN ('finished', 'FT', 'ended') ${compFilter}
+     ${scoredPredictionsJoin(compFilter, req.groupId)}
      GROUP BY u.id`,
-    [req.groupId, req.groupId, ...compParams]
+    [req.groupId, ...compParams, req.groupId]
   );
 
   const xiMap = Object.fromEntries(
@@ -425,11 +445,10 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
   // Classement général du groupe
   const allRows = await all(
     `SELECT u.id,
-            COALESCE(SUM(p.points), 0) + COALESCE(xi.xi_pts, 0) + COALESCE(sp.special_pts, 0) as total
+            COALESCE(pred.pred_points, 0) + COALESCE(xi.xi_pts, 0) + COALESCE(sp.special_pts, 0) as total
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
-     LEFT JOIN predictions p ON p.user_id = u.id AND p.group_id = ?
-     LEFT JOIN matches m ON m.id = p.match_id AND ${ACTIVE_SEASON_MATCH}${compFilter}
+     ${scoredPredictionsJoin(compFilter, req.groupId)}
      LEFT JOIN (
        SELECT user_id, SUM(points) as xi_pts FROM season_xi_points sx
        WHERE group_id = ? AND ${ACTIVE_SEASON_XI} GROUP BY user_id
@@ -440,7 +459,7 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
      ) sp ON sp.user_id = u.id
      GROUP BY u.id
      ORDER BY total DESC`,
-    [req.groupId, req.groupId, ...compParams, req.groupId, req.groupId]
+    [req.groupId, ...compParams, req.groupId, req.groupId, req.groupId]
   );
 
   const rank = allRows.findIndex(r => Number(r.id) === Number(userId)) + 1;

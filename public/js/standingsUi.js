@@ -268,7 +268,7 @@ export async function renderStandingsScreen(el, state) {
       const rows = await standings.general(state.group.id);
       body.innerHTML = `<div class="section-card standings-card">
         <div class="section-head"><div class="jn">Classement général</div></div>
-        <p class="profile-desc">Tous championnats · pronos + Mon 11 + vainqueurs</p>
+        <p class="profile-desc">Tous championnats · pronos terminés + Mon 11 + vainqueurs (fin de saison)</p>
         ${standingsBlockHtml(rows, state.user.id, compColors('PL'))}
       </div>`;
     } else if (state.standingsTab === 'byComp') {
