@@ -1,4 +1,4 @@
-import { auth, api, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js?v=46';
+import { auth, api, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js?v=47';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';

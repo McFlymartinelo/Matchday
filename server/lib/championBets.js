@@ -1,5 +1,6 @@
 import { all, run } from '../db/connection.js';
 import { scoreSpecialBet } from './scoring.js';
+import { isCompetitionSeasonFinished } from './season.js';
 
 function normName(name) {
   return String(name ?? '')
@@ -11,8 +12,20 @@ function normName(name) {
     .trim();
 }
 
-/** Met à jour les points des paris « champion » selon le leader actuel du classement officiel. */
+/** Met à jour les points des paris « champion » quand la saison est terminée (1er du classement). */
 export async function scoreChampionBetsForCompetition(competitionId, season = '2025-2026') {
+  if (!await isCompetitionSeasonFinished(competitionId, season)) {
+    const bets = await all(
+      `SELECT id FROM special_bets
+       WHERE competition_id = ? AND season = ? AND bet_type = 'champion'`,
+      [competitionId, season]
+    );
+    for (const bet of bets) {
+      await run('UPDATE special_bets SET points = 0 WHERE id = ?', [bet.id]);
+    }
+    return bets.length;
+  }
+
   const leader = await all(
     `SELECT team_name FROM official_standings
      WHERE competition_id = ? AND season = ? ORDER BY position ASC LIMIT 1`,

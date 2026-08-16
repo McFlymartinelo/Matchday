@@ -277,7 +277,7 @@ export async function renderProfile(el, state, renderApp) {
 
       <div class="section-head"><div class="jn">Vainqueur du championnat</div></div>
 
-      <p class="profile-desc">Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong>.</p>
+      <p class="profile-desc">Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison.</p>
 
       <div id="champion-bets" class="champion-bets"></div>
 
@@ -712,7 +712,11 @@ async function mountChampionBets(state, bets) {
 
   container.innerHTML = comps.map(c => {
 
-    const bet = bets.find(b => b.betType === 'champion' && b.competitionId === c.id);
+    const bet = bets.find(b =>
+      b.betType === 'champion'
+      && b.competitionId === c.id
+      && (b.season == null || b.season === (c.saisonActive ?? c.saison_active))
+    );
 
     const pts = bet?.points ? `<span class="champion-bet-pts">+${bet.points} pts</span>` : '';
 
@@ -736,7 +740,11 @@ async function mountChampionBets(state, bets) {
 
     const select = container.querySelector(`select[data-comp="${c.id}"]`);
 
-    const bet = bets.find(b => b.betType === 'champion' && b.competitionId === c.id);
+    const bet = bets.find(b =>
+      b.betType === 'champion'
+      && b.competitionId === c.id
+      && (b.season == null || b.season === (c.saisonActive ?? c.saison_active))
+    );
 
     try {
 
@@ -778,7 +786,7 @@ async function mountChampionBets(state, bets) {
 
         });
 
-        const pts = res.bet?.points ? ` (+${res.bet.points} pts actuellement)` : '';
+        const pts = res.bet?.points ? ` (+${res.bet.points} pts)` : '';
 
         showToast(`Vainqueur ${c.nom} enregistré${pts}`);
 

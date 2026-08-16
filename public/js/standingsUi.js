@@ -230,7 +230,7 @@ async function renderByCompTab(body, state) {
       ${compLogoHtml(selected, 'comp-head-logo')}
       <div>
         <div class="standings-comp-title">${selected.nom}</div>
-        <div class="standings-comp-sub">Classement pronos · vainqueur</div>
+        <div class="standings-comp-sub">Classement pronos · vainqueur (fin de saison)</div>
       </div>
     </div>
     ${standingsBlockHtml(rows, state.user.id, cc, { emptyMessage: 'Aucun point sur ce championnat' })}

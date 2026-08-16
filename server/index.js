@@ -8,6 +8,8 @@ import { seedCompetitions, seedDemoMatches } from './db/seed.js';
 import { get, all } from './db/connection.js';
 import { syncAllCompetitions, syncAllStandings, syncLiveScores, syncLeagueIds, cleanupTestMatches, autoRecalculateFinishedMatches } from './services/sync.js';
 import { dedupeCompetitionMatches } from './lib/matches.js';
+import { scoreChampionBetsForCompetition } from './lib/championBets.js';
+import { getCompetitionSeason } from './lib/season.js';
 
 import authRoutes from './routes/auth.js';
 import groupRoutes from './routes/groups.js';
@@ -138,6 +140,12 @@ async function initData() {
   let deduped = 0;
   for (const c of comps) {
     deduped += await dedupeCompetitionMatches(c.id);
+    try {
+      const season = await getCompetitionSeason(c.id);
+      await scoreChampionBetsForCompetition(c.id, season);
+    } catch (err) {
+      console.warn(`Paris vainqueur ligue ${c.id}:`, err.message);
+    }
   }
   if (deduped > 0) console.log(`Doublons matchs fusionnés au démarrage : ${deduped}`);
 }
