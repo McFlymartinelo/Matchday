@@ -1180,6 +1180,7 @@ async function saveMatchPrediction(matchId, card, { quiet = false } = {}) {
     });
     markCardSaved(card, scores);
     if (!quiet) showToast('Pronostic enregistré ✓', 'success');
+    advanceToNextPrediction(card);
     return true;
   } catch (err) {
     showToast(err.message, 'error');
@@ -1234,6 +1235,24 @@ function markCardSaved(card, scores = null) {
         bottom.textContent = 'à toi de jouer';
       }
     }, 1800);
+  }
+}
+
+function advanceToNextPrediction(currentCard) {
+  const allCards = [...document.querySelectorAll('.match-card:not(.match-card-locked)')];
+  const idx = allCards.indexOf(currentCard);
+  if (idx === -1) return;
+
+  for (let i = idx + 1; i < allCards.length; i++) {
+    const card = allCards[i];
+    const homeInput = card.querySelector('[data-side="home"]');
+    const awayInput = card.querySelector('[data-side="away"]');
+    if (!homeInput && !awayInput) continue;
+    const target = !homeInput?.value ? homeInput : (!awayInput?.value ? awayInput : null);
+    if (!target) continue;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => target.focus(), 350);
+    return;
   }
 }
 

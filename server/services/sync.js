@@ -1,6 +1,6 @@
 import { all, get, run } from '../db/connection.js';
 import * as bsd from './bsd.js';
-import { computeMatchdayXi, computeSeasonXiBonus } from '../lib/scoring.js';
+import { computeMatchdayXi, computeSeasonXiBonus, scorePrediction } from '../lib/scoring.js';
 import { dedupeBsdEvents, dedupeCompetitionMatches } from '../lib/matches.js';
 
 /** Mappe les IDs BSD réels depuis l'API (remplace les anciens IDs API-Football). */
@@ -130,11 +130,57 @@ export async function syncLiveScores() {
     }
 
     await logSync('live_scores', 'ok', `${count} scores live`);
+    await autoRecalculateFinishedMatches();
     return count;
   } catch (err) {
     await logSync('live_scores', 'error', err.message);
     return 0;
   }
+}
+
+export async function autoRecalculateFinishedMatches() {
+  const groupRows = await all(
+    'SELECT id, scoring_exact, scoring_diff, scoring_winner FROM groups'
+  );
+
+  let total = 0;
+  for (const group of groupRows) {
+    const compRows = await all(
+      'SELECT competition_id FROM group_competitions WHERE group_id = ?',
+      [group.id]
+    );
+    if (!compRows.length) continue;
+
+    const placeholders = compRows.map(() => '?').join(',');
+    const preds = await all(
+      `SELECT p.*, m.home_score AS actual_home, m.away_score AS actual_away
+       FROM predictions p
+       JOIN matches m ON m.id = p.match_id
+       WHERE p.group_id = ?
+         AND m.competition_id IN (${placeholders})
+         AND m.status IN ('finished', 'FT', 'ended')
+         AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+         AND p.points IS NULL`,
+      [group.id, ...compRows.map(r => r.competition_id)]
+    );
+
+    const scoring = { exact: group.scoring_exact, diff: group.scoring_diff, winner: group.scoring_winner };
+    for (const p of preds) {
+      const result = scorePrediction(
+        Number(p.home_score), Number(p.away_score),
+        Number(p.actual_home), Number(p.actual_away),
+        scoring
+      );
+      await run(
+        'UPDATE predictions SET points = ?, points_detail = ? WHERE id = ?',
+        [result.points, result.detail, p.id]
+      );
+      total++;
+    }
+  }
+
+  if (total > 0) await logSync('auto_recalculate', 'ok', `${total} pronostic(s) recalculé(s)`);
+  return total;
 }
 
 export async function syncStandings(competitionId, bsdLeagueId) {

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { migrate } from './db/connection.js';
 import { seedCompetitions, seedDemoMatches } from './db/seed.js';
 import { get, all } from './db/connection.js';
-import { syncAllCompetitions, syncAllStandings, syncLiveScores, syncLeagueIds, cleanupTestMatches } from './services/sync.js';
+import { syncAllCompetitions, syncAllStandings, syncLiveScores, syncLeagueIds, cleanupTestMatches, autoRecalculateFinishedMatches } from './services/sync.js';
 import { dedupeCompetitionMatches } from './lib/matches.js';
 
 import authRoutes from './routes/auth.js';
@@ -119,6 +119,13 @@ async function initData() {
     } catch (err) {
       console.warn('Sync BSD échouée :', err.message);
     }
+  }
+
+  try {
+    const recalculated = await autoRecalculateFinishedMatches();
+    if (recalculated > 0) console.log(`Pronostics recalculés au démarrage : ${recalculated}`);
+  } catch (err) {
+    console.warn('Recalcul pronostics échoué :', err.message);
   }
 
   const matchCount = Number((await get('SELECT COUNT(*) as n FROM matches'))?.n ?? 0);
