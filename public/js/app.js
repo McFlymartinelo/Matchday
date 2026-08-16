@@ -1050,6 +1050,31 @@ function matchCardHtml(m, cc, logoMap) {
   const homeTeamId = resolveBsdTeamId(m, 'home', logoMap);
   const awayTeamId = resolveBsdTeamId(m, 'away', logoMap);
 
+  const isFinished = m.isLocked
+    && ['finished', 'FT', 'ended'].includes(m.status)
+    && m.home_score !== null && m.away_score !== null;
+
+  if (isFinished) {
+    const pts = pred?.points ?? null;
+    const ptsColor = pts > 0 ? cc.color : 'var(--ink-soft)';
+    const ptsText = pts === null ? '' : (pts === 0 ? '0 pt' : `${pts} pt${pts > 1 ? 's' : ''}`);
+    const pronoLine = pred
+      ? `<div class="finished-prono">Mon pronostic : ${pred.home_score}–${pred.away_score}${ptsText ? ` · <span style="color:${ptsColor}">${ptsText}</span>` : ''}</div>`
+      : `<div class="finished-prono finished-no-prono">Pas de pronostic</div>`;
+
+    return `<div class="match-card match-card-locked match-card-finished" data-match="${m.id}" data-kickoff="${m.kickoff_at}" data-status="${m.status}" data-locked="1" data-home-score="${h}" data-away-score="${a}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
+    <div class="match-top">
+      <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${m.home_team_name}</span></div>
+      <div class="score-mid score-finished">
+        <div class="finished-result" style="color:${cc.color}">${m.home_score} – ${m.away_score}</div>
+        <div class="finished-lbl">Score réel</div>
+        ${pronoLine}
+      </div>
+      <div class="team right"><span class="team-name">${m.away_team_name}</span>${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
+    </div>
+  </div>`;
+  }
+
   let bottom = 'à toi de jouer';
   let bottomClass = 'open';
   if (m.calendarClosed || (m.isLocked && !pred)) {
