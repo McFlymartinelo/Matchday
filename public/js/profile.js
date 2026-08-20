@@ -277,7 +277,7 @@ export async function renderProfile(el, state, renderApp) {
 
       <div class="section-head"><div class="jn">Vainqueur du championnat</div></div>
 
-      <p class="profile-desc">Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison.</p>
+      <p class="profile-desc" id="champion-bets-desc">Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison.</p>
 
       <div id="champion-bets" class="champion-bets"></div>
 
@@ -692,11 +692,31 @@ export async function renderProfile(el, state, renderApp) {
 
 
 
+const CHAMPION_BETS_DEADLINE = new Date('2026-09-04T00:00:00');
+
 async function mountChampionBets(state, bets) {
 
   const container = document.getElementById('champion-bets');
 
   if (!container) return;
+
+  const locked = new Date() >= CHAMPION_BETS_DEADLINE;
+
+  const desc = document.getElementById('champion-bets-desc');
+
+  if (desc) {
+
+    if (locked) {
+
+      desc.innerHTML = '<span class="champion-bet-lock-badge">🔒 Pronos verrouillés depuis le 4 septembre</span> — Bon vainqueur = <strong>+5 pts</strong> en fin de saison.';
+
+    } else {
+
+      desc.innerHTML = `Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison. <span class="champion-bet-deadline">Verrouillage le 4 septembre.</span>`;
+
+    }
+
+  }
 
   const comps = state.competitions ?? [];
 
@@ -724,7 +744,7 @@ async function mountChampionBets(state, bets) {
 
       <div class="champion-bet-label">${compLogoHtml(c, 'comp-head-logo')} ${c.nom} ${pts}</div>
 
-      <select class="champion-bet-select" data-comp="${c.id}">
+      <select class="champion-bet-select" data-comp="${c.id}"${locked ? ' disabled' : ''}>
 
         <option value="">— Choisir une équipe —</option>
 
@@ -770,35 +790,39 @@ async function mountChampionBets(state, bets) {
 
     }
 
-    select.onchange = async () => {
+    if (!locked) {
 
-      if (!select.value) return;
+      select.onchange = async () => {
 
-      try {
+        if (!select.value) return;
 
-        const res = await specialBets.save(state.group.id, {
+        try {
 
-          competitionId: c.id,
+          const res = await specialBets.save(state.group.id, {
 
-          betType: 'champion',
+            competitionId: c.id,
 
-          betValue: select.value,
+            betType: 'champion',
 
-        });
+            betValue: select.value,
 
-        const pts = res.bet?.points ? ` (+${res.bet.points} pts)` : '';
+          });
 
-        showToast(`Vainqueur ${c.nom} enregistré${pts}`);
+          const pts = res.bet?.points ? ` (+${res.bet.points} pts)` : '';
 
-        renderApp();
+          showToast(`Vainqueur ${c.nom} enregistré${pts}`);
 
-      } catch (err) {
+          renderApp();
 
-        showToast(err.message || 'Erreur');
+        } catch (err) {
 
-      }
+          showToast(err.message || 'Erreur');
 
-    };
+        }
+
+      };
+
+    }
 
   }
 

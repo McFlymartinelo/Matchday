@@ -47,10 +47,16 @@ router.get('/:groupId/special-bets/teams/:competitionId', authRequired, groupMem
   res.json(teams.map(t => t.team_name));
 });
 
+const CHAMPION_BETS_DEADLINE = new Date('2026-09-04T00:00:00');
+
 router.post('/:groupId/special-bets', authRequired, groupMemberRequired, async (req, res) => {
   const { competitionId, betType, betValue, season: seasonBody } = req.body;
   if (!competitionId || !betType || !betValue) {
     return res.status(400).json({ error: 'Champs requis manquants' });
+  }
+
+  if (betType === 'champion' && new Date() >= CHAMPION_BETS_DEADLINE) {
+    return res.status(403).json({ error: 'Les pronos vainqueur sont verrouillés depuis le 4 septembre' });
   }
   const season = seasonBody ?? await getCompetitionSeason(Number(competitionId));
 
