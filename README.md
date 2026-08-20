@@ -72,6 +72,26 @@ npm run admin:promote -- --revoke marty
 
 En prod, configure `TURSO_DATABASE_URL` dans `.env` puis lance la même commande (elle cible la base Turso). Reconnecte-toi ensuite dans l'app.
 
+### Copier les pronostics d'un utilisateur entre groupes
+
+Utile pour migrer les pronos (et paris vainqueur) d'un groupe de test vers un groupe réel. Les scores réels des matchs sont déjà partagés — seuls les pronostics par groupe sont copiés.
+
+```bash
+# Simulation (rien n'est écrit)
+npm run copy:predictions -- --user Breizhantifa --from GroupeTest --to "La Cousinade" --dry-run
+
+# Copie réelle
+npm run copy:predictions -- --user Breizhantifa --from GroupeTest --to "La Cousinade"
+```
+
+Sur le serveur Docker :
+
+```bash
+docker compose exec matchday npm run copy:predictions -- --user Breizhantifa --from GroupeTest --to "La Cousinade"
+```
+
+L'utilisateur doit déjà être membre du groupe destination. Seuls les championnats suivis par les deux groupes sont copiés.
+
 En prod (admin connecté), même chose via API :
 
 ```http
