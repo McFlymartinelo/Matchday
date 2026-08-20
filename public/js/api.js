@@ -119,6 +119,7 @@ export const standings = {
   },
   profile: (groupId) => api(`/groups/${groupId}/profile`),
   analytics: (groupId) => api(`/groups/${groupId}/analytics`),
+  duel: (groupId, userIdA, userIdB) => api(`/groups/${groupId}/duel?a=${userIdA}&b=${userIdB}`),
 };
 
 export const seasonXi = {

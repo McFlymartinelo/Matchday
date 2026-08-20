@@ -493,4 +493,111 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
   });
 });
 
+/** Duel 1v1 : comparaison entre deux joueurs sur leurs pronostics communs. */
+router.get('/:groupId/duel', authRequired, groupMemberRequired, async (req, res) => {
+  const userIdA = Number(req.query.a);
+  const userIdB = Number(req.query.b);
+  if (!userIdA || !userIdB || userIdA === userIdB) {
+    return res.status(400).json({ error: 'Deux joueurs différents (a, b) sont requis' });
+  }
+
+  const users = await all(
+    `SELECT u.id, u.display_name, u.avatar, u.profile_color
+     FROM users u
+     JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
+     WHERE u.id IN (?, ?)`,
+    [req.groupId, userIdA, userIdB]
+  );
+  const userA = users.find(u => u.id === userIdA);
+  const userB = users.find(u => u.id === userIdB);
+  if (!userA || !userB) {
+    return res.status(404).json({ error: 'Joueur introuvable dans ce groupe' });
+  }
+
+  const compIds = (await all('SELECT competition_id FROM group_competitions WHERE group_id = ?', [req.groupId]))
+    .map(r => r.competition_id);
+  const compFilter = compIds.length
+    ? ` AND m.competition_id IN (${compIds.map(() => '?').join(',')})`
+    : '';
+  const compParams = [...compIds];
+
+  const commonMatches = await all(
+    `SELECT m.id, m.competition_id, m.matchday, m.home_team_name, m.away_team_name,
+            m.home_score, m.away_score, m.kickoff_at, c.code as comp_code,
+            pa.home_score as a_home, pa.away_score as a_away, pa.points as a_points, pa.points_detail as a_detail,
+            pb.home_score as b_home, pb.away_score as b_away, pb.points as b_points, pb.points_detail as b_detail
+     FROM matches m
+     JOIN competitions c ON c.id = m.competition_id
+     JOIN predictions pa ON pa.match_id = m.id AND pa.group_id = ? AND pa.user_id = ?
+     JOIN predictions pb ON pb.match_id = m.id AND pb.group_id = ? AND pb.user_id = ?
+     WHERE ${ACTIVE_SEASON_MATCH} AND m.status IN ${FINISHED_STATUSES}
+       AND pa.points IS NOT NULL AND pb.points IS NOT NULL ${compFilter}
+     ORDER BY m.kickoff_at`,
+    [req.groupId, userIdA, req.groupId, userIdB, ...compParams]
+  );
+
+  const n = commonMatches.length;
+  const statsFor = (detailKey, pointsKey) => {
+    const exact = commonMatches.filter(m => m[detailKey] === 'exact').length;
+    const diff = commonMatches.filter(m => m[detailKey] === 'diff').length;
+    const winner = commonMatches.filter(m => m[detailKey] === 'winner').length;
+    const miss = commonMatches.filter(m => m[detailKey] === 'miss').length;
+    const points = commonMatches.reduce((sum, m) => sum + (m[pointsKey] ?? 0), 0);
+    return {
+      points,
+      exactCount: exact,
+      diffCount: diff,
+      winnerCount: winner,
+      missCount: miss,
+      avgPerMatch: n > 0 ? Number((points / n).toFixed(2)) : 0,
+      exactPct: n > 0 ? Math.round((exact / n) * 100) : 0,
+      resultPct: n > 0 ? Math.round(((exact + diff + winner) / n) * 100) : 0,
+    };
+  };
+
+  const roundsMap = new Map();
+  for (const m of commonMatches) {
+    const key = `${m.competition_id}:${m.matchday}`;
+    if (!roundsMap.has(key)) {
+      roundsMap.set(key, { competitionId: m.competition_id, matchday: m.matchday, compCode: m.comp_code, pointsA: 0, pointsB: 0 });
+    }
+    const r = roundsMap.get(key);
+    r.pointsA += m.a_points ?? 0;
+    r.pointsB += m.b_points ?? 0;
+  }
+  const rounds = [...roundsMap.values()].map(r => ({
+    ...r,
+    label: `${r.compCode} · J${r.matchday}`,
+    winner: r.pointsA > r.pointsB ? 'a' : r.pointsA < r.pointsB ? 'b' : 'draw',
+  }));
+
+  const duelScore = {
+    a: rounds.filter(r => r.winner === 'a').length,
+    b: rounds.filter(r => r.winner === 'b').length,
+  };
+
+  const last = n > 0 ? commonMatches[n - 1] : null;
+  const lastMatch = last ? {
+    competitionId: last.competition_id,
+    compCode: last.comp_code,
+    matchday: last.matchday,
+    homeTeam: last.home_team_name,
+    awayTeam: last.away_team_name,
+    homeScore: last.home_score,
+    awayScore: last.away_score,
+    a: { homeScore: last.a_home, awayScore: last.a_away, points: last.a_points, detail: last.a_detail },
+    b: { homeScore: last.b_home, awayScore: last.b_away, points: last.b_points, detail: last.b_detail },
+  } : null;
+
+  res.json({
+    userA: { userId: userA.id, displayName: userA.display_name, avatar: userA.avatar, profileColor: userA.profile_color },
+    userB: { userId: userB.id, displayName: userB.display_name, avatar: userB.avatar, profileColor: userB.profile_color },
+    commonMatchesCount: n,
+    duelScore,
+    stats: { a: statsFor('a_detail', 'a_points'), b: statsFor('b_detail', 'b_points') },
+    rounds,
+    lastMatch,
+  });
+});
+
 export default router;

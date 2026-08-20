@@ -1,5 +1,5 @@
 import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js';
-import { renderAvatarHtml } from './avatars.js';
+import { renderAvatarHtml, clubCrestLetters } from './avatars.js';
 
 function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, showExtras = true } = {}) {
   return rows.map((r, i) => {
@@ -254,6 +254,7 @@ export async function renderStandingsScreen(el, state) {
     <button class="tab ${state.standingsTab === 'general' ? 'active' : ''}" data-tab="general">Général</button>
     <button class="tab ${state.standingsTab === 'byComp' ? 'active' : ''}" data-tab="byComp">Par championnat</button>
     <button class="tab ${state.standingsTab === 'stats' ? 'active' : ''}" data-tab="stats">Stats</button>
+    <button class="tab ${state.standingsTab === 'duel' ? 'active' : ''}" data-tab="duel">Duel</button>
   </div><div id="standings-body"></div>`;
 
   el.querySelectorAll('[data-tab]').forEach(btn => {
@@ -281,10 +282,194 @@ export async function renderStandingsScreen(el, state) {
         <div class="section-card">${lastMatchdayGridHtml(data.lastMatchdayByComp, data.members, state.user.id)}</div>
         <div class="section-card">${playerCardsHtml(data.members, state.user.id)}</div>
       `;
+    } else if (state.standingsTab === 'duel') {
+      await renderDuelTab(body, state);
     }
   } catch (err) {
     body.innerHTML = `<div class="empty-state">${err.message || 'Erreur de chargement'}</div>`;
   }
+}
+
+async function renderDuelTab(body, state) {
+  const members = state.group?.members ?? [];
+  if (members.length < 2) {
+    body.innerHTML = '<div class="empty-state">Il faut au moins 2 joueurs dans le groupe pour lancer un duel.</div>';
+    return;
+  }
+
+  if (!members.some(m => m.id === state.duelUserA)) {
+    state.duelUserA = members.some(m => m.id === state.user.id) ? state.user.id : members[0].id;
+  }
+  if (state.duelUserB === state.duelUserA || !members.some(m => m.id === state.duelUserB)) {
+    state.duelUserB = (members.find(m => m.id !== state.duelUserA) ?? members[0]).id;
+  }
+
+  const data = await standings.duel(state.group.id, state.duelUserA, state.duelUserB);
+
+  body.innerHTML = `<div class="section-card">
+      <div class="label">Choisir un duel</div>
+      ${duelSelectorHtml(members, state.duelUserA, state.duelUserB)}
+      <div class="duel-hint">Sur les journées pronostiquées en commun cette saison, tous championnats confondus.</div>
+    </div>
+    ${duelResultHtml(data)}`;
+
+  body.querySelector('[data-duel-side="a"]').onclick = () => {
+    state.duelUserA = cycleMember(members, state.duelUserA, state.duelUserB);
+    renderDuelTab(body, state);
+  };
+  body.querySelector('[data-duel-side="b"]').onclick = () => {
+    state.duelUserB = cycleMember(members, state.duelUserB, state.duelUserA);
+    renderDuelTab(body, state);
+  };
+  const challengeBtn = body.querySelector('[data-duel-challenge]');
+  if (challengeBtn) {
+    challengeBtn.onclick = () => {
+      state.duelUserB = cycleMember(members, state.duelUserB, state.duelUserA);
+      renderDuelTab(body, state);
+    };
+  }
+}
+
+function cycleMember(members, currentId, excludeId) {
+  const pool = members.filter(m => m.id !== excludeId);
+  const idx = pool.findIndex(m => m.id === currentId);
+  return pool[(idx + 1) % pool.length].id;
+}
+
+function duelSelectorHtml(members, userIdA, userIdB) {
+  const a = members.find(m => m.id === userIdA);
+  const b = members.find(m => m.id === userIdB);
+  const side = (m, key) => `<button class="duel-player-btn" data-duel-side="${key}">
+    <span class="duel-avatar" style="background:${m.profile_color || '#6B3FD6'}">${renderAvatarHtml(m.avatar, m.display_name, m.profile_color)}</span>
+    <span class="duel-player-name">${m.display_name}
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#8B85A3" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+  </button>`;
+  return `<div class="duel-vs-row">${side(a, 'a')}<span class="duel-vs-badge">VS</span>${side(b, 'b')}</div>`;
+}
+
+function duelPct(count, total) {
+  return total > 0 ? Math.round((count / total) * 100) : 0;
+}
+
+function duelCompareRow(label, a, b, suffix = '') {
+  return `<div class="duel-compare-label">${label}</div>
+    <div class="duel-compare-val ${a > b ? 'best' : ''}">${a}${suffix}</div>
+    <div class="duel-compare-val ${b > a ? 'best' : ''}">${b}${suffix}</div>`;
+}
+
+function duelBreakdownBarHtml(s, total) {
+  return `<div class="duel-breakdown-bar">
+    <span style="width:${duelPct(s.exactCount, total)}%;background:var(--l1)"></span>
+    <span style="width:${duelPct(s.diffCount, total)}%;background:#C9701F"></span>
+    <span style="width:${duelPct(s.winnerCount, total)}%;background:var(--pl)"></span>
+    <span style="width:${duelPct(s.missCount, total)}%;background:var(--border-soft)"></span>
+  </div>`;
+}
+
+function duelResultHtml(data) {
+  const { userA, userB, commonMatchesCount, duelScore, stats, rounds, lastMatch } = data;
+
+  const challengeBtnHtml = `<button class="btn btn-primary duel-cta" data-duel-challenge>Défier un autre joueur</button>`;
+
+  if (!commonMatchesCount) {
+    return `<div class="section-card"><div class="empty-state">Aucun match pronostiqué en commun pour l'instant.</div></div>${challengeBtnHtml}`;
+  }
+
+  const totalRounds = duelScore.a + duelScore.b;
+  const pctA = totalRounds > 0 ? Math.round((duelScore.a / totalRounds) * 100) : 50;
+  const leadDiff = Math.abs(duelScore.a - duelScore.b);
+  const leadHtml = duelScore.a === duelScore.b
+    ? `<div class="duel-lead">🤝 Duel à égalité</div>`
+    : `<div class="duel-lead">🏆 ${duelScore.a > duelScore.b ? userA.displayName : userB.displayName} mène le duel de ${leadDiff} journée${leadDiff > 1 ? 's' : ''}</div>`;
+
+  const historyRows = [...rounds].reverse().map(r => `<div class="duel-history-row">
+    <span class="duel-history-round">${r.label}</span>
+    <span class="duel-history-score">${r.pointsA} – ${r.pointsB}</span>
+    <span class="duel-history-crown">${r.winner === 'draw' ? '🤝' : '👑'}</span>
+  </div>`).join('');
+
+  const lastMatchHtml = lastMatch ? (() => {
+    const cc = compColors(lastMatch.compCode);
+    const predRow = (u, side) => `<div class="duel-pred-row ${side.detail === 'exact' ? 'win' : ''}">
+      <span class="duel-pred-avatar" style="background:${u.profileColor || '#6B3FD6'}">${renderAvatarHtml(u.avatar, u.displayName, u.profileColor)}</span>
+      <span class="duel-pred-text">${u.displayName} a joué ${side.homeScore}-${side.awayScore}</span>
+      <span class="duel-pred-pts">+${side.points ?? 0} pt${(side.points ?? 0) > 1 ? 's' : ''}</span>
+    </div>`;
+    return `<div class="section-card">
+      <div class="label">Face-à-face sur un match</div>
+      <div class="duel-subhint">Dernier match pronostiqué par les deux · ${lastMatch.compCode} · J${lastMatch.matchday}</div>
+      <div class="duel-match-teams">
+        <div class="duel-match-team">
+          <span class="duel-match-crest" style="background:${cc.bg};color:${cc.color}">${clubCrestLetters(lastMatch.homeTeam)}</span>
+          <span class="duel-match-team-name">${lastMatch.homeTeam}</span>
+        </div>
+        <span class="duel-match-score">${lastMatch.homeScore}-${lastMatch.awayScore}</span>
+        <div class="duel-match-team">
+          <span class="duel-match-crest" style="background:${cc.bg};color:${cc.color}">${clubCrestLetters(lastMatch.awayTeam)}</span>
+          <span class="duel-match-team-name">${lastMatch.awayTeam}</span>
+        </div>
+      </div>
+      ${predRow(userA, lastMatch.a)}
+      ${predRow(userB, lastMatch.b)}
+    </div>`;
+  })() : '';
+
+  return `
+    <div class="section-card">
+      <div class="label">Score du duel</div>
+      <div class="duel-subhint">Journées gagnées sur les pronostics communs</div>
+      <div class="duel-score-row">
+        <div class="duel-score-side">
+          <span class="duel-score-num a">${duelScore.a}</span>
+          <span class="duel-score-name">${userA.displayName}</span>
+        </div>
+        <span class="duel-score-sep">—</span>
+        <div class="duel-score-side">
+          <span class="duel-score-num b">${duelScore.b}</span>
+          <span class="duel-score-name">${userB.displayName}</span>
+        </div>
+      </div>
+      <div class="duel-bar"><span class="a" style="width:${pctA}%"></span><span class="b" style="width:${100 - pctA}%"></span></div>
+      ${leadHtml}
+    </div>
+
+    <div class="section-card">
+      <div class="label">Stats comparées</div>
+      <div class="duel-compare-grid">
+        <div></div>
+        <div class="duel-compare-head"><span class="duel-compare-avatar" style="background:${userA.profileColor || '#6B3FD6'}">${renderAvatarHtml(userA.avatar, userA.displayName, userA.profileColor)}</span><span class="name">${userA.displayName}</span></div>
+        <div class="duel-compare-head"><span class="duel-compare-avatar" style="background:${userB.profileColor || '#6B3FD6'}">${renderAvatarHtml(userB.avatar, userB.displayName, userB.profileColor)}</span><span class="name">${userB.displayName}</span></div>
+        <div class="duel-compare-sep"></div>
+        ${duelCompareRow('Points cumulés', stats.a.points, stats.b.points)}
+        ${duelCompareRow('Moy. pts/match', stats.a.avgPerMatch, stats.b.avgPerMatch)}
+        ${duelCompareRow('% Score exact', stats.a.exactPct, stats.b.exactPct, '%')}
+        ${duelCompareRow('% Bon résultat', stats.a.resultPct, stats.b.resultPct, '%')}
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="label">Détail par type de pari</div>
+      <div class="duel-subhint">Répartition des ${commonMatchesCount} pronostics communs</div>
+      <div class="duel-breakdown-row"><span class="duel-breakdown-name">${userA.displayName}</span>${duelBreakdownBarHtml(stats.a, commonMatchesCount)}</div>
+      <div class="duel-breakdown-row"><span class="duel-breakdown-name">${userB.displayName}</span>${duelBreakdownBarHtml(stats.b, commonMatchesCount)}</div>
+      <div class="duel-legend">
+        <div class="duel-legend-item"><span class="duel-legend-dot" style="background:var(--l1)"></span>Exact</div>
+        <div class="duel-legend-item"><span class="duel-legend-dot" style="background:#C9701F"></span>Écart</div>
+        <div class="duel-legend-item"><span class="duel-legend-dot" style="background:var(--pl)"></span>Vainqueur</div>
+        <div class="duel-legend-item"><span class="duel-legend-dot" style="background:var(--border-soft)"></span>Raté</div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="label">Historique journée par journée</div>
+      ${historyRows || '<div class="empty-state">Aucune journée commune terminée</div>'}
+    </div>
+
+    ${lastMatchHtml}
+
+    ${challengeBtnHtml}
+  `;
 }
 
 export function compPillsHtml(state) {

@@ -18,6 +18,8 @@ const state = {
   screen: 'matches',
   standingsTab: 'general',
   standingsCompId: null,
+  duelUserA: null,
+  duelUserB: null,
   scrollToMatchId: null,
 };
 
