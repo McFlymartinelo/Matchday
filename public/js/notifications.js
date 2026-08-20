@@ -1,6 +1,6 @@
 import { api, showToast } from './api.js';
 
-const SW_URL = '/sw.js?v=15';
+const SW_URL = '/sw.js?v=16';
 const PENDING_NAV_KEY = 'matchday_pending_nav';
 
 let navHandler = null;
