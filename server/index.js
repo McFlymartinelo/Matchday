@@ -8,6 +8,7 @@ import { seedCompetitions, seedDemoMatches } from './db/seed.js';
 import { get, all } from './db/connection.js';
 import { syncAllCompetitions, syncAllStandings, syncLiveScores, syncLeagueIds, cleanupTestMatches, autoRecalculateFinishedMatches } from './services/sync.js';
 import { dedupeCompetitionMatches } from './lib/matches.js';
+import { invertPersistedVenueOverrides } from './lib/matchOverrides.js';
 import { scoreChampionBetsForCompetition } from './lib/championBets.js';
 import { getCompetitionSeason } from './lib/season.js';
 
@@ -111,6 +112,13 @@ async function initData() {
   await migrate();
   await seedCompetitions();
   await cleanupTestMatches();
+
+  try {
+    const inverted = await invertPersistedVenueOverrides();
+    if (inverted > 0) console.log(`Inversion domicile J1 PSG–Rennes : ${inverted} match(s)`);
+  } catch (err) {
+    console.warn('Inversion domicile PSG–Rennes échouée :', err.message);
+  }
 
   if (process.env.BSD_API_TOKEN?.trim()) {
     try {

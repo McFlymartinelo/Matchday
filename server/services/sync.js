@@ -2,6 +2,11 @@ import { all, get, run } from '../db/connection.js';
 import * as bsd from './bsd.js';
 import { computeMatchdayXi, computeSeasonXiBonus, scorePrediction } from '../lib/scoring.js';
 import { dedupeBsdEvents, dedupeCompetitionMatches } from '../lib/matches.js';
+import { applyVenueOverride, invertPersistedVenueOverrides } from '../lib/matchOverrides.js';
+
+function normalizeWithOverrides(event, competitionId) {
+  return applyVenueOverride(bsd.normalizeEvent(event, competitionId));
+}
 
 /** Mappe les IDs BSD réels depuis l'API (remplace les anciens IDs API-Football). */
 export async function syncLeagueIds() {
@@ -66,7 +71,7 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
     }
 
     let count = 0;
-    const normalized = dedupeBsdEvents(events, competitionId, bsd.normalizeEvent);
+    const normalized = dedupeBsdEvents(events, competitionId, normalizeWithOverrides);
     for (const norm of normalized) {
       const matchSeason = bsd.seasonLabelFromKickoff(norm.kickoff_at);
       await run(
@@ -121,10 +126,11 @@ export async function syncLiveScores() {
     let count = 0;
 
     for (const event of events) {
+      const norm = normalizeWithOverrides(event, 0);
       await run(
         `UPDATE matches SET home_score = ?, away_score = ?, status = ?, updated_at = datetime('now')
          WHERE bsd_event_id = ?`,
-        [event.home_score, event.away_score, bsd.normalizeEvent(event, 0).status, event.id]
+        [norm.home_score, norm.away_score, norm.status, event.id]
       );
       count++;
     }
@@ -346,6 +352,7 @@ export async function syncAllCompetitions() {
       console.error(`Sync calendrier ${c.code} échouée:`, err.message);
     }
   }
+  await invertPersistedVenueOverrides();
   return total;
 }
 
