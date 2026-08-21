@@ -11,21 +11,25 @@ function normalizeWithOverrides(event, competitionId) {
 /** Mappe les IDs BSD réels depuis l'API (remplace les anciens IDs API-Football). */
 export async function syncLeagueIds() {
   try {
-    const data = await bsd.getLeagues({ is_active: true, limit: 200 });
+    // BSD refuse les params inconnus (400). Pas de `is_active` — les ligues inactives sont masquées par défaut.
+    const data = await bsd.getLeagues({ limit: 200 });
     const leagues = bsd.extractResults(data);
     const mapping = {
       L1: { names: ['ligue 1'], country: 'france' },
       PL: { names: ['premier league'], country: 'england' },
-      PD: { names: ['la liga'], country: 'spain' },
+      PD: { names: ['laliga', 'la liga', 'primera'], country: 'spain' },
       SA: { names: ['serie a'], country: 'italy' },
       BL1: { names: ['bundesliga'], country: 'germany' },
     };
 
     for (const [code, rule] of Object.entries(mapping)) {
       const found = leagues.find(l => {
+        if (l.is_women) return false;
         const name = (l.name ?? '').toLowerCase();
+        const compact = name.replace(/[\s-]/g, '');
         const country = (l.country ?? '').toLowerCase();
-        return rule.names.some(n => name.includes(n)) && country.includes(rule.country);
+        const nameMatch = rule.names.some(n => name.includes(n) || compact.includes(n.replace(/[\s-]/g, '')));
+        return nameMatch && country.includes(rule.country);
       });
       if (found) {
         await run('UPDATE competitions SET bsd_league_id = ? WHERE code = ?', [found.id, code]);
@@ -189,67 +193,167 @@ export async function autoRecalculateFinishedMatches() {
   return total;
 }
 
+async function resolveBsdSeasonId(bsdLeagueId, seasonLabel) {
+  try {
+    const seasons = await bsd.getLeagueSeasons(bsdLeagueId);
+    const fromList = bsd.findSeasonIdForLabel(seasons, seasonLabel);
+    if (fromList) return fromList;
+  } catch { /* liste des saisons indisponible */ }
+
+  try {
+    const current = await bsd.getCurrentSeason(bsdLeagueId);
+    if (current?.id && bsd.seasonLabelFromBsd(current) === seasonLabel) return current.id;
+  } catch { /* ignore */ }
+
+  try {
+    const league = await bsd.getLeague(bsdLeagueId);
+    const cur = league?.current_season;
+    if (cur?.id && bsd.seasonLabelFromBsd(cur) === seasonLabel) return cur.id;
+  } catch { /* ignore */ }
+
+  return null;
+}
+
+async function computeStandingsFromMatches(competitionId, seasonLabel) {
+  const matches = await all(
+    `SELECT home_team_name, away_team_name, home_score, away_score, home_bsd_team_id, away_bsd_team_id
+     FROM matches
+     WHERE competition_id = ? AND season = ?
+       AND status IN ('finished', 'FT', 'ended')
+       AND home_score IS NOT NULL AND away_score IS NOT NULL`,
+    [competitionId, seasonLabel]
+  );
+  if (!matches.length) return [];
+
+  const table = new Map();
+  const ensure = (name, id) => {
+    const key = bsd.normalizeTeamName(name);
+    if (!table.has(key)) {
+      table.set(key, {
+        team_name: name, team_id: id ?? null,
+        played: 0, won: 0, drawn: 0, lost: 0,
+        goals_for: 0, goals_against: 0, points: 0,
+      });
+    }
+    const row = table.get(key);
+    if (id && !row.team_id) row.team_id = id;
+    return row;
+  };
+
+  for (const m of matches) {
+    const home = ensure(m.home_team_name, m.home_bsd_team_id);
+    const away = ensure(m.away_team_name, m.away_bsd_team_id);
+    const hs = Number(m.home_score);
+    const as = Number(m.away_score);
+    home.played += 1;
+    away.played += 1;
+    home.goals_for += hs;
+    home.goals_against += as;
+    away.goals_for += as;
+    away.goals_against += hs;
+    if (hs > as) {
+      home.won += 1;
+      away.lost += 1;
+      home.points += 3;
+    } else if (hs < as) {
+      away.won += 1;
+      home.lost += 1;
+      away.points += 3;
+    } else {
+      home.drawn += 1;
+      away.drawn += 1;
+      home.points += 1;
+      away.points += 1;
+    }
+  }
+
+  return [...table.values()]
+    .sort((a, b) => b.points - a.points
+      || (b.goals_for - b.goals_against) - (a.goals_for - a.goals_against)
+      || b.goals_for - a.goals_for)
+    .map((r, i) => ({ ...r, position: i + 1 }));
+}
+
+async function rosterStandingsFromMatches(competitionId, seasonLabel) {
+  const teams = await all(
+    `SELECT team_name FROM (
+       SELECT home_team_name AS team_name FROM matches WHERE competition_id = ? AND season = ?
+       UNION
+       SELECT away_team_name FROM matches WHERE competition_id = ? AND season = ?
+     ) ORDER BY team_name`,
+    [competitionId, seasonLabel, competitionId, seasonLabel]
+  );
+  const idRows = await all(
+    `SELECT home_team_name AS team_name, home_bsd_team_id AS team_id FROM matches
+     WHERE competition_id = ? AND season = ? AND home_bsd_team_id IS NOT NULL
+     UNION ALL
+     SELECT away_team_name, away_bsd_team_id FROM matches
+     WHERE competition_id = ? AND season = ? AND away_bsd_team_id IS NOT NULL`,
+    [competitionId, seasonLabel, competitionId, seasonLabel]
+  );
+  const idMap = new Map();
+  for (const r of idRows) {
+    idMap.set(bsd.normalizeTeamName(r.team_name), r.team_id);
+  }
+  return teams.map((t, i) => ({
+    position: i + 1,
+    team_name: t.team_name,
+    team_id: idMap.get(bsd.normalizeTeamName(t.team_name)) ?? null,
+    played: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0, points: 0,
+  }));
+}
+
+function standingsLookEmpty(rows) {
+  return !rows.length || rows.every(r => (r.played ?? 0) === 0 && (r.points ?? 0) === 0);
+}
+
 export async function syncStandings(competitionId, bsdLeagueId) {
   try {
     const comp = await get('SELECT saison_active FROM competitions WHERE id = ?', [competitionId]);
     const seasonLabel = comp?.saison_active ?? '2025-2026';
 
-    const data = await bsd.getStandings(bsdLeagueId);
-    let rows = data.standings ?? bsd.extractResults(data);
-    let count = 0;
+    const seasonId = await resolveBsdSeasonId(bsdLeagueId, seasonLabel);
+    let rows = [];
+    if (seasonId) {
+      const data = await bsd.getStandings(bsdLeagueId, { season_id: seasonId });
+      rows = bsd.extractStandingsRows(data)
+        .map(bsd.normalizeStandingRow)
+        .filter(Boolean);
+    }
+
+    if (standingsLookEmpty(rows)) {
+      const computed = await computeStandingsFromMatches(competitionId, seasonLabel);
+      if (computed.length) rows = computed;
+    }
 
     if (!rows.length) {
-      const teams = await all(
-        `SELECT team_name FROM (
-           SELECT home_team_name AS team_name FROM matches WHERE competition_id = ? AND season = ?
-           UNION
-           SELECT away_team_name FROM matches WHERE competition_id = ? AND season = ?
-         ) ORDER BY team_name`,
-        [competitionId, seasonLabel, competitionId, seasonLabel]
-      );
-      const idRows = await all(
-        `SELECT home_team_name AS team_name, home_bsd_team_id AS team_id FROM matches
-         WHERE competition_id = ? AND season = ? AND home_bsd_team_id IS NOT NULL
-         UNION ALL
-         SELECT away_team_name, away_bsd_team_id FROM matches
-         WHERE competition_id = ? AND season = ? AND away_bsd_team_id IS NOT NULL`,
-        [competitionId, seasonLabel, competitionId, seasonLabel]
-      );
-      const idMap = new Map();
-      for (const r of idRows) {
-        idMap.set(bsd.normalizeTeamName(r.team_name), r.team_id);
-      }
-      rows = teams.map((t, i) => ({
-        position: i + 1,
-        team_name: t.team_name,
-        team_id: idMap.get(bsd.normalizeTeamName(t.team_name)) ?? null,
-        played: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0, points: 0,
-      }));
+      rows = await rosterStandingsFromMatches(competitionId, seasonLabel);
+    }
+
+    if (!rows.length) {
+      await logSync('standings', 'ok', `0 lignes ligue ${bsdLeagueId} (${seasonLabel})`);
+      return 0;
     }
 
     await run('DELETE FROM official_standings WHERE competition_id = ? AND season = ?', [competitionId, seasonLabel]);
 
+    let count = 0;
     for (const row of rows) {
-      const teamName = row.team?.name ?? row.team_name ?? row.name;
-      if (!teamName) continue;
-      const teamId = row.team_id ?? row.team?.id ?? null;
       await run(
         `INSERT INTO official_standings (competition_id, season, position, team_id, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(competition_id, season, team_name) DO UPDATE SET
            team_id = excluded.team_id, position = excluded.position, played = excluded.played, won = excluded.won,
            drawn = excluded.drawn, lost = excluded.lost, goals_for = excluded.goals_for,
            goals_against = excluded.goals_against, points = excluded.points, updated_at = datetime('now')`,
-        [competitionId, seasonLabel, row.position ?? row.rank, teamId, teamName,
-         row.played ?? row.all?.played ?? 0, row.won ?? row.all?.win ?? 0,
-         row.drawn ?? row.all?.draw ?? 0, row.lost ?? row.all?.lose ?? 0,
-         row.goals_for ?? row.all?.goals?.for ?? 0, row.goals_against ?? row.all?.goals?.against ?? 0,
-         row.points ?? row.all?.points ?? 0]
+        [competitionId, seasonLabel, row.position ?? row.rank, row.team_id ?? null, row.team_name,
+         row.played ?? 0, row.won ?? 0, row.drawn ?? 0, row.lost ?? 0,
+         row.goals_for ?? 0, row.goals_against ?? 0, row.points ?? 0]
       );
       count++;
     }
 
-    await logSync('standings', 'ok', `${count} lignes ligue ${bsdLeagueId} (${seasonLabel})`);
+    await logSync('standings', 'ok', `${count} lignes ligue ${bsdLeagueId} (${seasonLabel}${seasonId ? `, season ${seasonId}` : ''})`);
     const { scoreChampionBetsForCompetition } = await import('../lib/championBets.js');
     await scoreChampionBetsForCompetition(competitionId, seasonLabel);
     return count;
@@ -357,9 +461,13 @@ export async function syncAllCompetitions() {
 }
 
 export async function syncAllStandings() {
-  const comps = await all('SELECT id, bsd_league_id FROM competitions WHERE bsd_league_id IS NOT NULL');
+  const comps = await all('SELECT id, bsd_league_id, code FROM competitions WHERE bsd_league_id IS NOT NULL');
   for (const c of comps) {
-    await syncStandings(c.id, c.bsd_league_id);
+    try {
+      await syncStandings(c.id, c.bsd_league_id);
+    } catch (err) {
+      console.error(`Sync classement ${c.code} échouée:`, err.message);
+    }
   }
 }
 

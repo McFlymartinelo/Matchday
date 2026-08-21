@@ -18,7 +18,10 @@ async function bsdFetch(path, params = {}) {
   if (res.status === 401) {
     throw new Error('Token BSD invalide — vérifie BSD_API_TOKEN sur sports.bzzoiro.com');
   }
-  if (!res.ok) throw new Error(`BSD ${res.status}: ${path}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`BSD ${res.status}: ${path}${body ? ` — ${body.slice(0, 240)}` : ''}`);
+  }
   return res.json();
 }
 
@@ -88,6 +91,70 @@ export async function getStandings(leagueId, params = {}) {
   return bsdFetch(`/api/v2/leagues/${leagueId}/standings/`, params);
 }
 
+export async function getLeagueSeasons(leagueId) {
+  return bsdFetch(`/api/v2/leagues/${leagueId}/seasons/`);
+}
+
+export async function getCurrentSeason(leagueId) {
+  return bsdFetch(`/api/v2/leagues/${leagueId}/season/`);
+}
+
+/** Table plate ou payload groupé BSD (`groups` array / map). */
+export function extractStandingsRows(data) {
+  if (!data || typeof data !== 'object') return [];
+  if (Array.isArray(data.standings) && data.standings.length) return data.standings;
+  if (data.groups) {
+    if (Array.isArray(data.groups)) {
+      return data.groups.flatMap(g => (
+        Array.isArray(g) ? g : (g.standings ?? g.table ?? g.rows ?? [])
+      ));
+    }
+    if (typeof data.groups === 'object') {
+      return Object.values(data.groups).flatMap(g => (
+        Array.isArray(g) ? g : (g.standings ?? g.table ?? [])
+      ));
+    }
+  }
+  const extracted = extractResults(data);
+  if (extracted.length && (extracted[0]?.team_name || extracted[0]?.team || extracted[0]?.name)) {
+    return extracted;
+  }
+  return [];
+}
+
+/** BSD expose `pts` (pas `points`) dans la doc officielle. */
+export function normalizeStandingRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const teamName = row.team?.name ?? row.team_name ?? row.name;
+  if (!teamName) return null;
+  return {
+    position: row.position ?? row.rank ?? null,
+    team_id: row.team_id ?? row.team?.id ?? null,
+    team_name: teamName,
+    played: row.played ?? row.p ?? row.all?.played ?? 0,
+    won: row.won ?? row.w ?? row.all?.win ?? 0,
+    drawn: row.drawn ?? row.d ?? row.all?.draw ?? 0,
+    lost: row.lost ?? row.l ?? row.all?.lose ?? 0,
+    goals_for: row.goals_for ?? row.gf ?? row.all?.goals?.for ?? 0,
+    goals_against: row.goals_against ?? row.ga ?? row.all?.goals?.against ?? 0,
+    points: row.points ?? row.pts ?? row.all?.points ?? 0,
+  };
+}
+
+export function findSeasonIdForLabel(seasonsData, seasonLabel) {
+  const list = extractResults(seasonsData);
+  if (!list.length) return null;
+  const exact = list.find(s => seasonLabelFromBsd(s) === seasonLabel);
+  if (exact?.id) return exact.id;
+  const y1 = Number(String(seasonLabel).slice(0, 4));
+  const short = Number.isFinite(y1)
+    ? `${String(y1).slice(2)}/${String(y1 + 1).slice(2)}`
+    : null;
+  const byName = list.find(s => short && String(s.name ?? '').includes(short));
+  if (byName?.id) return byName.id;
+  return list.find(s => s.is_current)?.id ?? null;
+}
+
 /** Matchs sur une plage de dates (pagination). */
 export async function getEventsByDateRange(leagueId, dateFrom, dateTo) {
   const events = [];
@@ -152,7 +219,7 @@ export async function getStandingTeams(leagueId, seasonId = null) {
   try {
     const params = seasonId ? { season_id: seasonId } : {};
     const data = await getStandings(leagueId, params);
-    const rows = data.standings ?? extractResults(data);
+    const rows = extractStandingsRows(data);
     if (rows.length < 8) return null;
     return rows
       .map(row => ({

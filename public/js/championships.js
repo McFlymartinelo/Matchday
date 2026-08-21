@@ -13,7 +13,7 @@ function renderLeagueTable(comp, rows, logoMap) {
           ${compLogoHtml(comp, 'comp-head-logo')} ${comp.nom}
         </div>
       </div>
-      <div class="empty-state">Classement pas encore synchronisé.<br>La mise à jour se fait 1×/jour via BSD.</div>
+      <div class="empty-state">Classement pas encore synchronisé.<br>La mise à jour se fait chaque heure via BSD.</div>
     </div>`;
   }
 

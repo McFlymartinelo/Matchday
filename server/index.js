@@ -87,9 +87,13 @@ app.get('*', (_req, res) => {
 });
 
 function scheduleJobs() {
-  cron.schedule('0 */6 * * *', () => syncAllCompetitions().catch(console.error));
+  cron.schedule('0 */6 * * *', () => {
+    syncAllCompetitions()
+      .then(() => syncAllStandings())
+      .catch(console.error);
+  });
   cron.schedule('*/5 * * * *', () => syncLiveScores().catch(console.error));
-  cron.schedule('0 6 * * *', () => syncAllStandings().catch(console.error));
+  cron.schedule('20 * * * *', () => syncAllStandings().catch(console.error));
   const vapid = configureWebPush();
   if (!vapid.ok && process.env.NODE_ENV === 'production') {
     console.warn('⚠️  Push notifications désactivées :', vapid.error);
@@ -123,9 +127,13 @@ async function initData() {
   if (process.env.BSD_API_TOKEN?.trim()) {
     try {
       await syncLeagueIds();
+    } catch (err) {
+      console.warn('Sync IDs ligues BSD échouée :', err.message);
+    }
+    try {
       await syncAllCompetitions();
       await syncAllStandings();
-      console.log('Sync BSD : calendrier importé');
+      console.log('Sync BSD : calendrier et classements importés');
     } catch (err) {
       console.warn('Sync BSD échouée :', err.message);
     }
