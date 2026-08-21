@@ -3,6 +3,7 @@ import * as bsd from './bsd.js';
 import { computeMatchdayXi, computeSeasonXiBonus, scorePrediction } from '../lib/scoring.js';
 import { dedupeBsdEvents, dedupeCompetitionMatches } from '../lib/matches.js';
 import { applyVenueOverride, invertPersistedVenueOverrides } from '../lib/matchOverrides.js';
+import { applyZonesToRows, defaultEuropeanZones, extractZonesLegend } from '../lib/standingZones.js';
 
 function normalizeWithOverrides(event, competitionId) {
   return applyVenueOverride(bsd.normalizeEvent(event, competitionId));
@@ -309,13 +310,15 @@ function standingsLookEmpty(rows) {
 
 export async function syncStandings(competitionId, bsdLeagueId) {
   try {
-    const comp = await get('SELECT saison_active FROM competitions WHERE id = ?', [competitionId]);
+    const comp = await get('SELECT saison_active, code FROM competitions WHERE id = ?', [competitionId]);
     const seasonLabel = comp?.saison_active ?? '2025-2026';
 
     const seasonId = await resolveBsdSeasonId(bsdLeagueId, seasonLabel);
     let rows = [];
+    let bsdZones = [];
     if (seasonId) {
       const data = await bsd.getStandings(bsdLeagueId, { season_id: seasonId });
+      bsdZones = extractZonesLegend(data.zones);
       rows = bsd.extractStandingsRows(data)
         .map(bsd.normalizeStandingRow)
         .filter(Boolean);
@@ -335,20 +338,26 @@ export async function syncStandings(competitionId, bsdLeagueId) {
       return 0;
     }
 
+    const zones = bsdZones.length ? bsdZones : defaultEuropeanZones(comp?.code, rows.length);
+    rows = applyZonesToRows(rows, zones);
+
     await run('DELETE FROM official_standings WHERE competition_id = ? AND season = ?', [competitionId, seasonLabel]);
 
     let count = 0;
     for (const row of rows) {
       await run(
-        `INSERT INTO official_standings (competition_id, season, position, team_id, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `INSERT INTO official_standings (competition_id, season, position, team_id, team_name, played, won, drawn, lost, goals_for, goals_against, points, zone_key, zone_label, zone_type, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(competition_id, season, team_name) DO UPDATE SET
            team_id = excluded.team_id, position = excluded.position, played = excluded.played, won = excluded.won,
            drawn = excluded.drawn, lost = excluded.lost, goals_for = excluded.goals_for,
-           goals_against = excluded.goals_against, points = excluded.points, updated_at = datetime('now')`,
+           goals_against = excluded.goals_against, points = excluded.points,
+           zone_key = excluded.zone_key, zone_label = excluded.zone_label, zone_type = excluded.zone_type,
+           updated_at = datetime('now')`,
         [competitionId, seasonLabel, row.position ?? row.rank, row.team_id ?? null, row.team_name,
          row.played ?? 0, row.won ?? 0, row.drawn ?? 0, row.lost ?? 0,
-         row.goals_for ?? 0, row.goals_against ?? 0, row.points ?? 0]
+         row.goals_for ?? 0, row.goals_against ?? 0, row.points ?? 0,
+         row.zone_key ?? null, row.zone_label ?? null, row.zone_type ?? null]
       );
       count++;
     }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { all, get, run } from '../db/connection.js';
 import { authRequired, groupMemberRequired } from '../middleware/auth.js';
 import { getCompetitionSeason } from '../lib/season.js';
+import { applyZonesToRows, defaultEuropeanZones } from '../lib/standingZones.js';
 
 const router = Router();
 
@@ -146,9 +147,15 @@ router.get('/:groupId/standings/official/:competitionId', authRequired, groupMem
     'SELECT * FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
     [compId, season]
   );
-  rows = dedupeStandingsRows(rows);
+  rows = decorateStandingZones(dedupeStandingsRows(rows), (await get('SELECT code FROM competitions WHERE id = ?', [compId]))?.code);
   res.json(rows);
 });
+
+function decorateStandingZones(rows, compCode) {
+  const withStored = applyZonesToRows(rows, []);
+  if (withStored.some(r => r.zone_key)) return withStored;
+  return applyZonesToRows(rows, defaultEuropeanZones(compCode, rows.length));
+}
 
 function dedupeStandingsRows(rows) {
   const byPos = new Map();
@@ -173,10 +180,10 @@ router.get('/:groupId/standings/official', authRequired, groupMemberRequired, as
   for (const c of comps) {
     const season = c.saison_active ?? '2025-2026';
     let rows = await all(
-      'SELECT position, team_id, team_name, played, won, drawn, lost, goals_for, goals_against, points, updated_at FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
+      'SELECT position, team_id, team_name, played, won, drawn, lost, goals_for, goals_against, points, zone_key, zone_label, zone_type, updated_at FROM official_standings WHERE competition_id = ? AND season = ? ORDER BY position',
       [c.id, season]
     );
-    rows = dedupeStandingsRows(rows);
+    rows = decorateStandingZones(dedupeStandingsRows(rows), c.code);
     result.push({
       competition: {
         id: c.id, code: c.code, nom: c.nom, emoji: c.emoji, logo: c.logo,

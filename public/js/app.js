@@ -3,7 +3,7 @@ import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
 import { renderProfile } from './profile.js';
-import { renderChampionships } from './championships.js';
+import { renderChampionships } from './championships.js?v=51';
 import { renderSeasonXi } from './seasonXi.js';
 import { renderStandingsScreen, compPillsHtml } from './standingsUi.js';
 import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers, navigateToMatchDeepLink } from './notifications.js';

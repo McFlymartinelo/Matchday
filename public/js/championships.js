@@ -1,9 +1,26 @@
 import { standings, teamCrest, compColors, compLogoHtml, showToast, buildTeamLogoMap, normTeamName, compId, sameCompId } from './api.js';
 
+const ZONE_LEGEND = [
+  { id: 'cl', label: 'LDC' },
+  { id: 'el', label: 'Ligue Europa' },
+  { id: 'ecl', label: 'Conférence' },
+  { id: 'relq', label: 'Barrage' },
+  { id: 'rel', label: 'Relégation' },
+];
+
+function zoneBucket(zoneKey, zoneLabel = '') {
+  const key = String(zoneKey ?? '').toLowerCase();
+  const label = String(zoneLabel ?? '').toLowerCase();
+  if (key === 'cl' || key === 'clq' || key === 'ucl' || label.includes('champions')) return 'cl';
+  if (key === 'el' || key === 'elq' || key === 'uel' || (label.includes('europa') && !label.includes('conference'))) return 'el';
+  if (key === 'uecl' || key === 'ecl' || key === 'coe' || label.includes('conference') || label.includes('conférence')) return 'ecl';
+  if (key === 'relq' || (label.includes('playoff') && label.includes('releg'))) return 'relq';
+  if (key === 'rel' || label.includes('relegation') || label.includes('relégation')) return 'rel';
+  return null;
+}
+
 function renderLeagueTable(comp, rows, logoMap) {
   const cc = compColors(comp.code);
-  const total = rows.length;
-  const relegateFrom = Math.max(total - 2, 1);
 
   if (!rows.length) {
     return `<div class="section-card">
@@ -16,6 +33,9 @@ function renderLeagueTable(comp, rows, logoMap) {
       <div class="empty-state">Classement pas encore synchronisé.<br>La mise à jour se fait chaque heure via BSD.</div>
     </div>`;
   }
+
+  const presentZones = new Set(rows.map(r => zoneBucket(r.zone_key, r.zone_label)).filter(Boolean));
+  const legend = ZONE_LEGEND.filter(z => presentZones.has(z.id));
 
   return `<div class="section-card league-table-card" style="--league-color:${comp.couleur ?? cc.color};--league-bg:${comp.couleurBg ?? cc.bg}">
     <div class="section-head">
@@ -33,10 +53,10 @@ function renderLeagueTable(comp, rows, logoMap) {
     ${rows.map(r => {
       const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0);
       const gdStr = gd > 0 ? `+${gd}` : String(gd);
-      const isLeader = r.position === 1;
-      const isRelegation = r.position >= relegateFrom && total >= 5;
+      const zone = zoneBucket(r.zone_key, r.zone_label);
       const teamId = r.team_id ?? logoMap.get(normTeamName(r.team_name));
-      return `<div class="league-row ${isLeader ? 'leader' : ''} ${isRelegation ? 'relegation' : ''}">
+      const zoneTitle = r.zone_label ? ` title="${r.zone_label}"` : '';
+      return `<div class="league-row${zone ? ` zone-${zone}` : ''}"${zoneTitle}>
         <span class="league-pos">${r.position}</span>
         <span class="league-team">
           ${teamCrest(r.team_name, comp.code, teamId)}
@@ -47,10 +67,9 @@ function renderLeagueTable(comp, rows, logoMap) {
         <span class="league-pts">${r.points ?? 0}</span>
       </div>`;
     }).join('')}
-    ${total >= 5 ? `<div class="league-legend">
-      <span><span class="legend-dot leader"></span> Leader</span>
-      <span><span class="legend-dot relegation"></span> Relégation</span>
-    </div>` : ''}
+    ${legend.length ? `<div class="league-legend">${legend.map(z =>
+      `<span><span class="legend-dot zone-${z.id}"></span> ${z.label}</span>`
+    ).join('')}</div>` : ''}
   </div>`;
 }
 

@@ -138,6 +138,9 @@ export function normalizeStandingRow(row) {
     goals_for: row.goals_for ?? row.gf ?? row.all?.goals?.for ?? 0,
     goals_against: row.goals_against ?? row.ga ?? row.all?.goals?.against ?? 0,
     points: row.points ?? row.pts ?? row.all?.points ?? 0,
+    zone_key: row.zone?.key ?? row.zone_key ?? null,
+    zone_label: row.zone?.label ?? row.zone_label ?? null,
+    zone_type: row.zone?.type ?? row.zone_type ?? null,
   };
 }
 

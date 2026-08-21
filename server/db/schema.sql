@@ -224,6 +224,9 @@ CREATE TABLE IF NOT EXISTS official_standings (
   goals_for INTEGER DEFAULT 0,
   goals_against INTEGER DEFAULT 0,
   points INTEGER DEFAULT 0,
+  zone_key TEXT,
+  zone_label TEXT,
+  zone_type TEXT,
   updated_at TEXT DEFAULT (datetime('now')),
   UNIQUE(competition_id, season, team_name)
 );

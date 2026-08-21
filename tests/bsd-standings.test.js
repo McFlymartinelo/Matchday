@@ -38,6 +38,17 @@ describe('normalizeStandingRow', () => {
     assert.equal(row.team_name, 'Sporting CP');
   });
 
+  it('reprend la zone UEFA BSD', () => {
+    const row = normalizeStandingRow({
+      position: 1,
+      team_name: 'Sporting CP',
+      pts: 82,
+      zone: { key: 'cl', label: 'Champions League', type: 'qualification' },
+    });
+    assert.equal(row.zone_key, 'cl');
+    assert.equal(row.zone_label, 'Champions League');
+  });
+
   it('ignore une ligne sans nom d’équipe', () => {
     assert.equal(normalizeStandingRow({ position: 1, pts: 10 }), null);
   });
