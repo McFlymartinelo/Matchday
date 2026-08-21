@@ -580,6 +580,65 @@ body.auth-page {
 .finished-prono { font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-top: 3px; white-space: nowrap; }
 .finished-no-prono { font-style: italic; opacity: 0.7; }
 
+/* Finished match — toggle hint + pronos panel */
+.finished-toggle-hint {
+  text-align: center;
+  margin-top: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+.match-card-finished.pronos-open .finished-toggle-hint { opacity: 1; }
+
+.pronos-panel {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+.pronos-panel-header {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+.pronos-loading, .pronos-panel-empty {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding: 6px 0 2px;
+}
+.pronos-panel-empty { font-style: italic; }
+
+.prono-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.prono-row + .prono-row { border-top: 1px solid var(--border-soft); }
+.prono-avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--border-soft);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0; line-height: 1;
+}
+.prono-avatar-initials { font-size: 9px; font-weight: 800; color: var(--ink-soft); }
+.prono-info {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.prono-name { font-size: 12px; font-weight: 700; }
+.prono-score { font-size: 11px; font-weight: 600; color: var(--ink-soft); }
+.prono-none { font-style: italic; opacity: 0.7; }
+.prono-pts {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 13px; font-weight: 700;
+  flex-shrink: 0; min-width: 30px; text-align: right;
+}
+
 /* Standings */
 .standings-card .row {
   display: flex; align-items: center; padding: 10px 8px; border-radius: 14px; gap: 10px; margin-bottom: 4px;

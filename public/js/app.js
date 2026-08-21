@@ -1,4 +1,4 @@
-import { auth, api, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js?v=49';
+import { auth, api, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js?v=50';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
@@ -956,6 +956,66 @@ async function renderApp() {
   }
 }
 
+async function onFinishedCardClick(e) {
+  if (e.target.closest('input, button')) return;
+  const card = e.currentTarget;
+  const hint = card.querySelector('.finished-toggle-hint');
+  const existing = card.querySelector('.pronos-panel');
+
+  if (existing) {
+    existing.remove();
+    card.classList.remove('pronos-open');
+    if (hint) hint.textContent = 'Voir les pronos du groupe';
+    return;
+  }
+
+  const matchId = Number(card.dataset.match);
+  card.classList.add('pronos-open');
+  if (hint) hint.textContent = 'Fermer ▲';
+
+  const panel = document.createElement('div');
+  panel.className = 'pronos-panel';
+  panel.innerHTML = '<div class="pronos-loading">Chargement…</div>';
+  card.appendChild(panel);
+
+  try {
+    const { predictions } = await matches.groupPredictions(state.group.id, matchId);
+    panel.innerHTML = pronosPanelHtml(predictions, card.dataset.compColor);
+  } catch (err) {
+    panel.remove();
+    card.classList.remove('pronos-open');
+    if (hint) hint.textContent = 'Voir les pronos du groupe';
+    showToast(err.message, 'error');
+  }
+}
+
+function pronosPanelHtml(predictions, compColor) {
+  if (!predictions.length) {
+    return '<div class="pronos-panel-empty">Aucun pronostic posé</div>';
+  }
+  const LABELS = { exact: 'Score exact', diff: 'Bon écart', winner: 'Bon vainqueur', miss: 'Raté' };
+  const rows = predictions.map(p => {
+    const pts = p.points ?? null;
+    const avatarContent = (p.avatar && p.avatar.trim()) ? p.avatar : initials(p.display_name);
+    const isEmoji = !!(p.avatar && p.avatar.trim());
+    const ptsHtml = pts !== null
+      ? `<span class="prono-pts" style="color:${pts > 0 ? compColor : 'var(--ink-soft)'}">${pts} pt${pts !== 1 ? 's' : ''}</span>`
+      : '';
+    const scoreText = p.home_score !== null
+      ? `${p.home_score}–${p.away_score}${p.points_detail ? ` · ${LABELS[p.points_detail] ?? p.points_detail}` : ''}`
+      : null;
+    return `<div class="prono-row">
+      <span class="prono-avatar${isEmoji ? '' : ' prono-avatar-initials'}">${avatarContent}</span>
+      <div class="prono-info">
+        <span class="prono-name">${p.display_name}</span>
+        <span class="prono-score${scoreText ? '' : ' prono-none'}">${scoreText ?? 'Pas de prono'}</span>
+      </div>
+      ${ptsHtml}
+    </div>`;
+  }).join('');
+  return `<div class="pronos-panel-header">Pronos du groupe · ${predictions.length}</div>${rows}`;
+}
+
 async function renderMatches(el) {
   pendingPredictions.clear();
   for (const timer of autoSaveTimers.values()) clearTimeout(timer);
@@ -1029,6 +1089,10 @@ async function renderMatches(el) {
       input.addEventListener('change', onScoreInput);
     });
 
+    el.querySelectorAll('.match-card-finished').forEach(card => {
+      card.addEventListener('click', onFinishedCardClick);
+    });
+
     startMatchLockRefresh();
 
     if (state.scrollToMatchId) {
@@ -1079,6 +1143,7 @@ function matchCardHtml(m, cc, logoMap) {
       </div>
       <div class="team right"><span class="team-name">${m.away_team_name}</span>${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
     </div>
+    <div class="finished-toggle-hint">Voir les pronos du groupe</div>
   </div>`;
   }
 

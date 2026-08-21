@@ -99,6 +99,8 @@ export const matches = {
   detail: (groupId, matchId) => api(`/groups/${groupId}/matches/${matchId}`),
   predict: (groupId, body) =>
     api(`/groups/${groupId}/predictions`, { method: 'POST', body: JSON.stringify(body) }),
+  groupPredictions: (groupId, matchId) =>
+    api(`/groups/${groupId}/matches/${matchId}/predictions`),
 };
 
 export const standings = {
