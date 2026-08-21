@@ -130,7 +130,8 @@ router.post('/:groupId/predictions/:predictionId/reactions', authRequired, group
 });
 
 router.get('/:groupId/matches/:matchId/predictions', authRequired, groupMemberRequired, async (req, res) => {
-  const match = await get('SELECT status, competition_id FROM matches WHERE id = ?', [req.params.matchId]);
+  const matchId = Number(req.params.matchId);
+  const match = await get('SELECT status, competition_id FROM matches WHERE id = ?', [matchId]);
   if (!match) return res.status(404).json({ error: 'Match introuvable' });
 
   if (!['finished', 'FT', 'ended'].includes(match.status)) {
@@ -148,7 +149,7 @@ router.get('/:groupId/matches/:matchId/predictions', authRequired, groupMemberRe
      JOIN users u ON u.id = p.user_id
      WHERE p.group_id = ? AND p.match_id = ?
      ORDER BY CASE WHEN p.points IS NULL THEN 1 ELSE 0 END, p.points DESC, u.display_name ASC`,
-    [req.groupId, match.id]
+    [req.groupId, matchId]
   );
 
   res.json({ predictions });
