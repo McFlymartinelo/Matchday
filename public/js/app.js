@@ -1037,7 +1037,12 @@ async function renderMatches(el) {
       focusMatchAfterRender(id);
     } else {
       const firstOpen = el.querySelector('.matchday-section.matchday-open');
-      firstOpen?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (firstOpen) {
+        requestAnimationFrame(() => {
+          const top = firstOpen.getBoundingClientRect().top + window.scrollY - 8;
+          window.scrollTo({ top, behavior: 'smooth' });
+        });
+      }
     }
   } catch (e) {
     el.innerHTML = `<div class="empty-state">${e.message}</div>`;
