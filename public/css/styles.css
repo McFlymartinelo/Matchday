@@ -1000,6 +1000,60 @@ html[data-theme="dark"] .theme-option.active {
   color: var(--liga); font-weight: 800; cursor: pointer; flex-shrink: 0;
 }
 
+/* Onglets page Matchs */
+.matches-tabs {
+  display: flex; gap: 6px; padding: 0 16px 12px; flex-wrap: wrap;
+}
+.matches-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: 999px; border: 1.5px solid transparent;
+  font-family: 'Baloo 2', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; background: transparent; color: var(--ink-soft);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.matches-tab.active {
+  background: var(--premier-league-bg); color: var(--premier-league);
+  border-color: var(--premier-league);
+}
+html[data-theme="dark"] .matches-tab.active {
+  background: var(--premier-league-bg); color: #a88af0;
+  border-color: #7B50E0;
+}
+.matches-tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  background: var(--premier-league); color: white;
+}
+.matches-tab.active .matches-tab-badge { background: var(--premier-league); color: white; }
+
+/* Bannière de progression des pronos */
+.pronos-progress-banner {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 0 14px; padding: 11px 16px; border-radius: 16px;
+  background: var(--premier-league-bg);
+  border: 1px solid color-mix(in srgb, var(--premier-league) 20%, transparent);
+}
+.pronos-progress-info { flex: 1; min-width: 0; }
+.pronos-progress-title {
+  font-family: 'Baloo 2', sans-serif; font-size: 13px; font-weight: 700;
+  color: var(--premier-league);
+}
+html[data-theme="dark"] .pronos-progress-title { color: #a88af0; }
+.pronos-progress-sub {
+  font-size: 11px; color: var(--ink-soft); margin-top: 1px; font-weight: 600;
+}
+.pronos-progress-pct {
+  font-family: 'Baloo 2', sans-serif; font-size: 22px; font-weight: 900;
+  color: var(--premier-league); min-width: 48px; text-align: right;
+}
+html[data-theme="dark"] .pronos-progress-pct { color: #a88af0; }
+
+/* Badge "X à faire" dans la section-head */
+.matches-section-badge {
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+}
+
 /* Tabs */
 .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
 .tab {

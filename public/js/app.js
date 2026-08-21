@@ -16,6 +16,7 @@ const state = {
   competitions: [],
   activeComp: null,
   screen: 'matches',
+  matchesTab: 'pronostiquer',
   standingsTab: 'general',
   standingsCompId: null,
   duelUserA: null,
@@ -936,7 +937,14 @@ async function renderApp() {
     };
   });
   document.querySelectorAll('[data-comp]').forEach(btn => {
-    btn.onclick = () => { setActiveComp(btn.dataset.comp); renderApp(); };
+    btn.onclick = () => {
+      if (state.activeComp != null && sameCompId(state.activeComp, btn.dataset.comp)) {
+        state.activeComp = null;
+      } else {
+        setActiveComp(btn.dataset.comp);
+      }
+      renderApp();
+    };
   });
 
   requestAnimationFrame(() => {
@@ -1066,7 +1074,69 @@ async function renderMatches(el) {
       return String(mdA).localeCompare(String(mdB), 'fr');
     });
 
-    el.innerHTML = `${closedBanner}${sortedMatchdays.map(([key, ms]) => {
+    // Journée courante par championnat : min matchday avec matchs ouverts.
+    // Si cette journée est en cours (certains verr.), on inclut aussi la suivante.
+    const relevantPronoIds = new Set();
+    {
+      const byCompId = {};
+      for (const m of matchList) (byCompId[m.competition_id] ??= []).push(m);
+      for (const compMatches of Object.values(byCompId)) {
+        const openByMd = {}, hasLockedInMd = {};
+        for (const m of compMatches) {
+          const md = m.matchday ?? '?';
+          if (!m.isLocked) (openByMd[md] ??= []).push(m);
+          else hasLockedInMd[md] = true;
+        }
+        const openMds = Object.keys(openByMd).sort((a, b) => Number(a) - Number(b));
+        if (!openMds.length) continue;
+        const currentMd = openMds[0];
+        for (const m of openByMd[currentMd]) relevantPronoIds.add(m.id);
+        if (hasLockedInMd[currentMd] && openMds[1]) {
+          for (const m of openByMd[openMds[1]]) relevantPronoIds.add(m.id);
+        }
+      }
+    }
+
+    // Stats basées sur la journée courante (ce qui est affiché dans l'onglet)
+    const currentDayOpen = matchList.filter(m => !m.isLocked && relevantPronoIds.has(m.id));
+    const totalOpen = currentDayOpen.length;
+    const totalPending = currentDayOpen.filter(m => {
+      const h = m.prediction?.home_score ?? '';
+      const a = m.prediction?.away_score ?? '';
+      return h === '' || a === '';
+    }).length;
+    const totalFilled = totalOpen - totalPending;
+    const pct = totalOpen > 0 ? Math.round((totalFilled / totalOpen) * 100) : 100;
+
+    const tabsHtml = `<div class="matches-tabs">
+      <button class="matches-tab${state.matchesTab === 'pronostiquer' ? ' active' : ''}" data-matches-tab="pronostiquer">
+        À pronostiquer${totalPending > 0 ? `<span class="matches-tab-badge">${totalPending}</span>` : ''}
+      </button>
+      <button class="matches-tab${state.matchesTab === 'tous' ? ' active' : ''}" data-matches-tab="tous">
+        Tous les matchs
+      </button>
+    </div>`;
+
+    let bannerHtml = '';
+    if (state.matchesTab === 'pronostiquer' && totalOpen > 0) {
+      bannerHtml = `<div class="pronos-progress-banner">
+        <div class="pronos-progress-info">
+          <div class="pronos-progress-title">${totalPending > 0 ? `${totalPending} match${totalPending > 1 ? 's' : ''} sans pronostic` : 'Tous les pronos sont posés\u00a0!'}</div>
+          <div class="pronos-progress-sub">${totalOpen} ouvert${totalOpen > 1 ? 's' : ''} · ${totalFilled} renseigné${totalFilled > 1 ? 's' : ''}</div>
+        </div>
+        <div class="pronos-progress-pct">${pct}%</div>
+      </div>`;
+    }
+
+    // Filtre les journées selon l'onglet actif
+    let displayedMatchdays = sortedMatchdays;
+    if (state.matchesTab === 'pronostiquer') {
+      displayedMatchdays = sortedMatchdays
+        .map(([key, ms]) => [key, ms.filter(m => relevantPronoIds.has(m.id))])
+        .filter(([, ms]) => ms.length > 0);
+    }
+
+    const sectionsHtml = displayedMatchdays.map(([key, ms]) => {
       const [season, md] = key.split('|');
       const comp = state.competitions.find(c => c.id === ms[0].competition_id) ?? ms[0];
       const cc = compColors(comp.code ?? comp.comp_code);
@@ -1074,15 +1144,36 @@ async function renderMatches(el) {
       const countdown = openMatches.find(m => formatCountdown(m.kickoff_at));
       const cd = countdown ? formatCountdown(countdown.kickoff_at) : '';
       const allLocked = openMatches.length === 0;
+      const pendingInSection = openMatches.filter(m => {
+        const h = m.prediction?.home_score ?? '';
+        const a = m.prediction?.away_score ?? '';
+        return h === '' || a === '';
+      }).length;
+      const sectionBadge = state.matchesTab === 'pronostiquer' && pendingInSection > 0
+        ? `<span class="matches-section-badge" style="background:${cc.bg};color:${cc.color}">${pendingInSection} à faire</span>`
+        : '';
 
       return `<div class="section-card matchday-section ${allLocked ? 'matchday-past' : 'matchday-open'}" data-matchday="${md}" data-season="${season}">
         <div class="section-head">
           <div class="jn"><div class="comp-flag" style="background:${cc.bg};color:${cc.color}">${comp.code ?? comp.comp_code}</div>Journée ${md}<span class="season-tag">${season}</span></div>
-          ${cd ? `<div class="countdown-bubble">${cd}</div>` : allLocked ? `<div class="countdown-bubble locked">${calendarClosed ? 'Fermée' : 'Terminée'}</div>` : ''}
+          ${sectionBadge || (cd ? `<div class="countdown-bubble">${cd}</div>` : allLocked ? `<div class="countdown-bubble locked">${calendarClosed ? 'Fermée' : 'Terminée'}</div>` : '')}
         </div>
         ${ms.map(m => matchCardHtml(m, cc, logoMap)).join('')}
       </div>`;
-    }).join('')}`;
+    }).join('');
+
+    const emptyProno = state.matchesTab === 'pronostiquer' && displayedMatchdays.length === 0
+      ? `<div class="section-card"><div class="empty-state">Aucun match à pronostiquer pour l'instant.</div></div>`
+      : '';
+
+    el.innerHTML = `${tabsHtml}${closedBanner}${bannerHtml}${sectionsHtml}${emptyProno}`;
+
+    el.querySelectorAll('[data-matches-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.matchesTab = btn.dataset.matchesTab;
+        renderMatches(el);
+      });
+    });
 
     el.querySelectorAll('.score-pill input').forEach(input => {
       input.addEventListener('input', onScoreInput);
