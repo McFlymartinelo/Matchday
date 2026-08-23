@@ -1,4 +1,4 @@
-import { auth, api, groups, matches, showToast, compColors, teamCrest, formatCountdown, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js?v=50';
+import { auth, api, groups, matches, showToast, compColors, teamCrest, formatCountdown, formatKickoffLabel, initials, buildTeamLogoMap, normTeamName, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js?v=51';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
@@ -1211,6 +1211,8 @@ function matchCardHtml(m, cc, logoMap) {
   const filled = h !== '' && a !== '';
   const homeTeamId = resolveBsdTeamId(m, 'home', logoMap);
   const awayTeamId = resolveBsdTeamId(m, 'away', logoMap);
+  const kickoffLabel = formatKickoffLabel(m.kickoff_at);
+  const kickoffHtml = kickoffLabel ? `<div class="match-kickoff">${kickoffLabel}</div>` : '';
 
   const isFinished = m.isLocked
     && ['finished', 'FT', 'ended'].includes(m.status)
@@ -1225,6 +1227,7 @@ function matchCardHtml(m, cc, logoMap) {
       : `<div class="finished-prono finished-no-prono">Pas de pronostic</div>`;
 
     return `<div class="match-card match-card-locked match-card-finished" data-match="${m.id}" data-kickoff="${m.kickoff_at}" data-status="${m.status}" data-locked="1" data-home-score="${h}" data-away-score="${a}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
+    ${kickoffHtml}
     <div class="match-top">
       <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${m.home_team_name}</span></div>
       <div class="score-mid score-finished">
@@ -1253,6 +1256,7 @@ function matchCardHtml(m, cc, logoMap) {
   }
 
   return `<div class="match-card${m.isLocked ? ' match-card-locked' : ''}" data-match="${m.id}" data-kickoff="${m.kickoff_at}" data-status="${m.status}" data-locked="${m.isLocked ? '1' : '0'}" data-home-score="${h}" data-away-score="${a}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
+    ${kickoffHtml}
     <div class="match-top">
       <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${m.home_team_name}</span></div>
       <div class="score-mid">

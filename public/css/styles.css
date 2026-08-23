@@ -534,8 +534,15 @@ body.auth-page {
 .calendar-closed-banner span { font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
 
 /* Match cards */
-.match-card { background: var(--card-soft); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
+.match-card {
+  background: var(--card-soft); border-radius: 16px; padding: 10px 14px 12px; margin-bottom: 8px;
+  cursor: pointer; display: flex; flex-direction: column;
+}
 .match-card:last-child { margin-bottom: 0; }
+.match-kickoff {
+  text-align: center; font-size: 11px; font-weight: 700; color: var(--ink-soft);
+  margin-bottom: 8px; letter-spacing: 0.02em; line-height: 1.2;
+}
 .match-card-highlight {
   outline: 2px solid var(--accent, #6B3FD6);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #6B3FD6) 25%, transparent);

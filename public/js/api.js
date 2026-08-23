@@ -229,8 +229,49 @@ export function teamCrest(name, compCode, teamId = null) {
   return `<div class="crest-sm" style="background:${c.bg};color:${c.color}">${letters}</div>`;
 }
 
+const PARIS_TZ = 'Europe/Paris';
+
+export function parseKickoffDate(kickoff) {
+  if (!kickoff) return null;
+  const raw = String(kickoff);
+  const d = raw.includes('T') || /Z|[+-]\d{2}:?\d{2}$/.test(raw)
+    ? new Date(raw)
+    : new Date(`${raw.replace(' ', 'T')}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function formatKickoffLabel(kickoff) {
+  const d = parseKickoffDate(kickoff);
+  if (!d) return '';
+
+  const parts = new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: PARIS_TZ,
+  }).formatToParts(d);
+
+  const pick = (type) => parts.find(p => p.type === type)?.value ?? '';
+  const weekdayRaw = pick('weekday').replace(/\.$/, '');
+  const day = pick('day');
+  const month = pick('month').replace(/\.$/, '');
+  const hour = pick('hour').padStart(2, '0');
+  const minute = pick('minute').padStart(2, '0');
+  if (!day || !hour) return '';
+
+  const weekday = weekdayRaw
+    ? `${weekdayRaw.charAt(0).toUpperCase()}${weekdayRaw.slice(1).toLowerCase()}.`
+    : '';
+  return `${weekday} ${day} ${month} · ${hour}h${minute}`.replace(/^\s+/, '');
+}
+
 export function formatCountdown(kickoff) {
-  const diff = new Date(kickoff) - new Date();
+  const d = parseKickoffDate(kickoff);
+  if (!d) return null;
+  const diff = d - new Date();
   if (diff <= 0) return null;
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
