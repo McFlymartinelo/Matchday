@@ -964,7 +964,7 @@ async function renderApp() {
   }
 }
 
-async function onFinishedCardClick(e) {
+async function onPronosToggleClick(e) {
   if (e.target.closest('input, button')) return;
   const card = e.currentTarget;
   const hint = card.querySelector('.finished-toggle-hint');
@@ -1180,9 +1180,7 @@ async function renderMatches(el) {
       input.addEventListener('change', onScoreInput);
     });
 
-    el.querySelectorAll('.match-card-finished').forEach(card => {
-      card.addEventListener('click', onFinishedCardClick);
-    });
+    el.querySelectorAll('.match-card-locked').forEach(bindPronosToggle);
 
     startMatchLockRefresh();
 
@@ -1255,6 +1253,10 @@ function matchCardHtml(m, cc, logoMap) {
     bottomClass = '';
   }
 
+  const pronosHint = m.isLocked
+    ? '<div class="finished-toggle-hint">Voir les pronos du groupe</div>'
+    : '';
+
   return `<div class="match-card${m.isLocked ? ' match-card-locked' : ''}" data-match="${m.id}" data-kickoff="${m.kickoff_at}" data-status="${m.status}" data-locked="${m.isLocked ? '1' : '0'}" data-home-score="${h}" data-away-score="${a}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
     ${kickoffHtml}
     <div class="match-top">
@@ -1270,6 +1272,7 @@ function matchCardHtml(m, cc, logoMap) {
       <div class="team right"><span class="team-name">${m.away_team_name}</span>${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
     </div>
     <div class="match-bottom ${bottomClass}" style="${bottomClass === 'points' ? `color:${cc.color}` : ''}">${bottom}</div>
+    ${pronosHint}
   </div>`;
 }
 
@@ -1305,9 +1308,26 @@ function lockMatchCard(card) {
 
   const bottom = card.querySelector('.match-bottom');
   if (bottom) {
-    bottom.textContent = h !== '' && a !== '' ? 'verrouillé' : 'verrouillé';
+    bottom.textContent = 'verrouillé';
     bottom.className = 'match-bottom locked-closed';
   }
+
+  ensurePronosHint(card);
+  bindPronosToggle(card);
+}
+
+function ensurePronosHint(card) {
+  if (card.querySelector('.finished-toggle-hint')) return;
+  const hint = document.createElement('div');
+  hint.className = 'finished-toggle-hint';
+  hint.textContent = 'Voir les pronos du groupe';
+  card.appendChild(hint);
+}
+
+function bindPronosToggle(card) {
+  if (card.dataset.pronosBound === '1') return;
+  card.dataset.pronosBound = '1';
+  card.addEventListener('click', onPronosToggleClick);
 }
 
 function startMatchLockRefresh() {

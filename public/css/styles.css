@@ -573,6 +573,7 @@ body.auth-page {
 .score-pill.filled { background: var(--l1-bg); color: var(--l1); border-color: var(--l1); }
 .score-pill.pending { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #6B3FD6) 35%, transparent); }
 .match-card-dirty .match-bottom.open { color: var(--accent, #6B3FD6); }
+.match-card-locked { cursor: pointer; }
 .match-card-locked .score-pill input { pointer-events: none; }
 .match-bottom { text-align: center; margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--ink-soft); }
 .match-bottom.points { color: var(--l1); }
@@ -596,7 +597,8 @@ body.auth-page {
   color: var(--ink-soft);
   opacity: 0.75;
 }
-.match-card-finished.pronos-open .finished-toggle-hint { opacity: 1; }
+.match-card-finished.pronos-open .finished-toggle-hint,
+.match-card-locked.pronos-open .finished-toggle-hint { opacity: 1; }
 
 .pronos-panel {
   margin-top: 8px;

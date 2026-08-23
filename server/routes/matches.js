@@ -85,12 +85,14 @@ router.get('/:groupId/matches/:matchId', authRequired, groupMemberRequired, asyn
     } catch { /* BSD indisponible */ }
   }
 
-  const groupPreds = await all(
-    `SELECT p.*, u.display_name, u.avatar FROM predictions p
-     JOIN users u ON u.id = p.user_id
-     WHERE p.group_id = ? AND p.match_id = ?`,
-    [req.groupId, match.id]
-  );
+  const groupPreds = isMatchLocked(match)
+    ? await all(
+      `SELECT p.*, u.display_name, u.avatar FROM predictions p
+       JOIN users u ON u.id = p.user_id
+       WHERE p.group_id = ? AND p.match_id = ?`,
+      [req.groupId, match.id]
+    )
+    : [];
 
   res.json({ match, unavailable, h2h, predictions: groupPreds });
 });
@@ -131,10 +133,10 @@ router.post('/:groupId/predictions/:predictionId/reactions', authRequired, group
 
 router.get('/:groupId/matches/:matchId/predictions', authRequired, groupMemberRequired, async (req, res) => {
   const matchId = Number(req.params.matchId);
-  const match = await get('SELECT status, competition_id FROM matches WHERE id = ?', [matchId]);
+  const match = await get('SELECT status, competition_id, kickoff_at FROM matches WHERE id = ?', [matchId]);
   if (!match) return res.status(404).json({ error: 'Match introuvable' });
 
-  if (!['finished', 'FT', 'ended'].includes(match.status)) {
+  if (!isMatchLocked(match)) {
     return res.status(403).json({ error: 'Pronostics non encore révélés' });
   }
 
