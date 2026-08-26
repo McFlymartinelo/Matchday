@@ -3,6 +3,7 @@ import { all, get, run } from '../db/connection.js';
 import { authRequired, groupMemberRequired } from '../middleware/auth.js';
 import { getCompetitionSeason } from '../lib/season.js';
 import { applyZonesToRows, defaultEuropeanZones } from '../lib/standingZones.js';
+import { withRanks } from '../lib/scoring.js';
 
 const router = Router();
 
@@ -66,8 +67,7 @@ router.get('/:groupId/standings', authRequired, groupMemberRequired, async (req,
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
      ${scoredPredictionsJoin(matchFilter, req.groupId)}
-     GROUP BY u.id
-     ORDER BY pred_points DESC`,
+     GROUP BY u.id`,
     [req.groupId, ...matchParams, req.groupId]
   );
 
@@ -85,7 +85,7 @@ router.get('/:groupId/standings', authRequired, groupMemberRequired, async (req,
   );
   const specialMap = Object.fromEntries(specialRows.map(s => [s.user_id, s.special_points]));
 
-  res.json(rows.map((r, i) => {
+  res.json(withRanks(rows.map((r) => {
     const specialPoints = specialMap[r.id] ?? 0;
     const scoredCount = Number(r.scored_count ?? 0);
     const missCount = Number(r.miss_count ?? 0);
@@ -93,7 +93,6 @@ router.get('/:groupId/standings', authRequired, groupMemberRequired, async (req,
     const precision = scoredCount > 0 ? Math.round((hitCount / scoredCount) * 100) : 0;
     const avgPerMatch = scoredCount > 0 ? Number((r.pred_points / scoredCount).toFixed(2)) : 0;
     return {
-      rank: i + 1,
       userId: r.id,
       displayName: r.display_name,
       avatar: r.avatar,
@@ -110,7 +109,7 @@ router.get('/:groupId/standings', authRequired, groupMemberRequired, async (req,
       precision,
       avgPerMatch,
     };
-  }));
+  })));
 });
 
 router.get('/:groupId/standings/matchday/:matchday', authRequired, groupMemberRequired, async (req, res) => {
@@ -118,7 +117,10 @@ router.get('/:groupId/standings/matchday/:matchday', authRequired, groupMemberRe
   const matchday = Number(req.params.matchday);
 
   let sql = `SELECT u.id, u.display_name, u.avatar,
-             COALESCE(SUM(CASE WHEN m.id IS NOT NULL THEN p.points ELSE 0 END), 0) as points
+             COALESCE(SUM(CASE WHEN m.id IS NOT NULL THEN p.points ELSE 0 END), 0) as points,
+             COALESCE(SUM(CASE WHEN m.id IS NOT NULL AND p.points_detail = 'exact' THEN 1 ELSE 0 END), 0) as exact_count,
+             COALESCE(SUM(CASE WHEN m.id IS NOT NULL AND p.points_detail = 'diff' THEN 1 ELSE 0 END), 0) as diff_count,
+             COALESCE(SUM(CASE WHEN m.id IS NOT NULL AND p.points_detail = 'winner' THEN 1 ELSE 0 END), 0) as winner_count
              FROM users u
              JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
              LEFT JOIN predictions p ON p.user_id = u.id AND p.group_id = ?
@@ -128,10 +130,16 @@ router.get('/:groupId/standings/matchday/:matchday', authRequired, groupMemberRe
                AND m.status IN ${FINISHED_STATUSES}`;
   const params = [req.groupId, req.groupId, matchday];
   if (competitionId) { sql += ' AND m.competition_id = ?'; params.push(Number(competitionId)); }
-  sql += ' GROUP BY u.id ORDER BY points DESC';
+  sql += ' GROUP BY u.id';
 
   const rows = await all(sql, params);
-  res.json(rows.map((r, i) => ({ rank: i + 1, ...r })));
+  res.json(withRanks(rows.map((r) => ({
+    ...r,
+    total: Number(r.points),
+    exactCount: Number(r.exact_count),
+    diffCount: Number(r.diff_count),
+    winnerCount: Number(r.winner_count),
+  }))));
 });
 
 router.get('/:groupId/standings/official/:competitionId', authRequired, groupMemberRequired, async (req, res) => {
@@ -251,7 +259,7 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
       .map(r => [r.user_id, r.n])
   );
 
-  const members = membersRaw.map(r => {
+  const members = withRanks(membersRaw.map(r => {
     const scoredCount = Number(r.scored_count ?? 0);
     const hitCount = r.exact_count + r.diff_count + r.winner_count;
     const predPoints = Number(r.pred_points);
@@ -275,8 +283,7 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
       precision: scoredCount > 0 ? Math.round((hitCount / scoredCount) * 100) : 0,
       avgPerMatch: scoredCount > 0 ? Number((predPoints / scoredCount).toFixed(2)) : 0,
     };
-  }).sort((a, b) => b.totalPoints - a.totalPoints)
-    .map((m, i) => ({ ...m, rank: i + 1 }));
+  }));
 
   const rounds = await all(
     `SELECT m.competition_id, m.matchday, MIN(m.kickoff_at) as kickoff,
@@ -290,7 +297,10 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
   );
 
   const roundPoints = await all(
-    `SELECT m.competition_id, m.matchday, p.user_id, COALESCE(SUM(p.points), 0) as points
+    `SELECT m.competition_id, m.matchday, p.user_id, COALESCE(SUM(p.points), 0) as points,
+            COALESCE(SUM(CASE WHEN p.points_detail = 'exact' THEN 1 ELSE 0 END), 0) as exact_count,
+            COALESCE(SUM(CASE WHEN p.points_detail = 'diff' THEN 1 ELSE 0 END), 0) as diff_count,
+            COALESCE(SUM(CASE WHEN p.points_detail = 'winner' THEN 1 ELSE 0 END), 0) as winner_count
      FROM predictions p
      JOIN matches m ON m.id = p.match_id
      WHERE p.group_id = ? AND p.points IS NOT NULL
@@ -314,7 +324,12 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
     if (!predLookup.has(k)) predLookup.set(k, new Map());
     if (!fullLookup.has(k)) fullLookup.set(k, new Map());
     const pts = Number(r.points);
-    predLookup.get(k).set(r.user_id, pts);
+    predLookup.get(k).set(r.user_id, {
+      points: pts,
+      exactCount: Number(r.exact_count),
+      diffCount: Number(r.diff_count),
+      winnerCount: Number(r.winner_count),
+    });
     fullLookup.get(k).set(r.user_id, pts);
   }
   for (const r of xiRoundPoints) {
@@ -324,7 +339,9 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
     fullLookup.get(k).set(r.user_id, prev + Number(r.points));
   }
 
-  const cumulative = new Map(members.map(m => [m.userId, 0]));
+  const cumulative = new Map(members.map(m => [m.userId, {
+    total: 0, exactCount: 0, diffCount: 0, winnerCount: 0,
+  }]));
   const matchdayEvolution = [];
   const pointsByMatchday = [];
 
@@ -343,14 +360,26 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
     };
 
     for (const m of members) {
-      roundPts.points[m.userId] = byUserPred.get(m.userId) ?? 0;
-      cumulative.set(m.userId, (cumulative.get(m.userId) ?? 0) + (byUserFull.get(m.userId) ?? 0));
+      const pred = byUserPred.get(m.userId);
+      roundPts.points[m.userId] = pred?.points ?? 0;
+      const cur = cumulative.get(m.userId);
+      cur.total += byUserFull.get(m.userId) ?? 0;
+      cur.exactCount += pred?.exactCount ?? 0;
+      cur.diffCount += pred?.diffCount ?? 0;
+      cur.winnerCount += pred?.winnerCount ?? 0;
     }
 
-    const ranked = [...members]
-      .map(m => ({ userId: m.userId, displayName: m.displayName, total: cumulative.get(m.userId) ?? 0 }))
-      .sort((a, b) => b.total - a.total)
-      .map((r, i) => ({ ...r, rank: i + 1 }));
+    const ranked = withRanks(members.map(m => {
+      const cur = cumulative.get(m.userId);
+      return {
+        userId: m.userId,
+        displayName: m.displayName,
+        total: cur.total,
+        exactCount: cur.exactCount,
+        diffCount: cur.diffCount,
+        winnerCount: cur.winnerCount,
+      };
+    }));
 
     pointsByMatchday.push(roundPts);
     matchdayEvolution.push({ round: idx + 1, label, rankings: ranked });
@@ -387,7 +416,7 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
     const byUserPred = predLookup.get(k) ?? new Map();
     const points = {};
     for (const m of members) {
-      points[m.userId] = byUserPred.get(m.userId) ?? 0;
+      points[m.userId] = byUserPred.get(m.userId)?.points ?? 0;
     }
     return {
       competitionId: c.id,
@@ -451,8 +480,11 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
 
   // Classement général du groupe
   const allRows = await all(
-    `SELECT u.id,
-            COALESCE(pred.pred_points, 0) + COALESCE(xi.xi_pts, 0) + COALESCE(sp.special_pts, 0) as total
+    `SELECT u.id, u.display_name,
+            COALESCE(pred.pred_points, 0) + COALESCE(xi.xi_pts, 0) + COALESCE(sp.special_pts, 0) as total,
+            COALESCE(pred.exact_count, 0) as exact_count,
+            COALESCE(pred.diff_count, 0) as diff_count,
+            COALESCE(pred.winner_count, 0) as winner_count
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
      ${scoredPredictionsJoin(compFilter, req.groupId)}
@@ -464,12 +496,19 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
        SELECT user_id, SUM(points) as special_pts FROM special_bets sb
        WHERE group_id = ? AND ${ACTIVE_SEASON_SPECIAL} GROUP BY user_id
      ) sp ON sp.user_id = u.id
-     GROUP BY u.id
-     ORDER BY total DESC`,
+     GROUP BY u.id`,
     [req.groupId, ...compParams, req.groupId, req.groupId, req.groupId]
   );
 
-  const rank = allRows.findIndex(r => Number(r.id) === Number(userId)) + 1;
+  const ranked = withRanks(allRows.map((r) => ({
+    userId: r.id,
+    displayName: r.display_name,
+    totalPoints: Number(r.total),
+    exactCount: Number(r.exact_count),
+    diffCount: Number(r.diff_count),
+    winnerCount: Number(r.winner_count),
+  })));
+  const rank = ranked.find((r) => Number(r.userId) === Number(userId))?.rank ?? Number(memberCount);
   const predPoints = Number(predStats?.pred_points ?? 0);
   const totalPoints = predPoints + Number(xiPoints) + Number(specialPoints);
   const scoredCount = Number(predStats?.scored_count ?? 0);

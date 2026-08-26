@@ -123,6 +123,31 @@ export function scoreSpecialBet(betType, betValue, actualValue) {
 }
 
 /**
+ * Départage du classement pronos :
+ * 1. total de points
+ * 2. nombre de scores exacts
+ * 3. nombre de bons écarts (diff)
+ * 4. nombre de bons 1N2 (winner)
+ * 5. nom (ordre stable)
+ */
+export function compareRankingRows(a, b) {
+  const n = (v) => Number(v ?? 0);
+  const pts = n(b.totalPoints ?? b.total) - n(a.totalPoints ?? a.total);
+  if (pts) return pts;
+  const exact = n(b.exactCount) - n(a.exactCount);
+  if (exact) return exact;
+  const diff = n(b.diffCount) - n(a.diffCount);
+  if (diff) return diff;
+  const winner = n(b.winnerCount) - n(a.winnerCount);
+  if (winner) return winner;
+  return String(a.displayName ?? '').localeCompare(String(b.displayName ?? ''), 'fr');
+}
+
+export function withRanks(rows) {
+  return [...rows].sort(compareRankingRows).map((row, i) => ({ ...row, rank: i + 1 }));
+}
+
+/**
  * Filtre les matchs par championnats du groupe (logique serveur).
  */
 export function filterMatchesByGroupCompetitions(matches, groupCompetitionIds) {

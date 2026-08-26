@@ -7,6 +7,8 @@ import {
   computeSeasonXiBonus,
   scoreSpecialBet,
   filterMatchesByGroupCompetitions,
+  compareRankingRows,
+  withRanks,
 } from '../server/lib/scoring.js';
 
 describe('scorePrediction', () => {
@@ -170,5 +172,50 @@ describe('filterMatchesByGroupCompetitions — intégration DB', () => {
     assert.equal(filtered.length, 1);
     assert.equal(filtered[0].competition_id, 1);
     await closeDb();
+  });
+});
+
+describe('compareRankingRows / withRanks', () => {
+  const row = (name, totalPoints, exactCount, diffCount, winnerCount) => ({
+    displayName: name, totalPoints, exactCount, diffCount, winnerCount,
+  });
+
+  it('classe d\'abord au total de points', () => {
+    const ranked = withRanks([row('A', 10, 0, 0, 0), row('B', 20, 0, 0, 0)]);
+    assert.equal(ranked[0].displayName, 'B');
+    assert.equal(ranked[0].rank, 1);
+    assert.equal(ranked[1].rank, 2);
+  });
+
+  it('à points égaux, départage par le nombre d\'exacts', () => {
+    const ranked = withRanks([
+      row('Shenkare', 43, 6, 7, 11),
+      row('Stargui', 43, 8, 3, 13),
+    ]);
+    assert.equal(ranked[0].displayName, 'Stargui');
+    assert.equal(ranked[1].displayName, 'Shenkare');
+  });
+
+  it('à exacts égaux, départage par le nombre d\'écarts', () => {
+    const ranked = withRanks([
+      row('A', 20, 4, 2, 10),
+      row('B', 20, 4, 5, 1),
+    ]);
+    assert.equal(ranked[0].displayName, 'B');
+  });
+
+  it('à écarts égaux, départage par le nombre de 1N2', () => {
+    const ranked = withRanks([
+      row('A', 20, 4, 5, 3),
+      row('B', 20, 4, 5, 8),
+    ]);
+    assert.equal(ranked[0].displayName, 'B');
+  });
+
+  it('accepte le champ total (évolution journée)', () => {
+    assert.ok(compareRankingRows(
+      { total: 43, exactCount: 6, diffCount: 0, winnerCount: 0 },
+      { total: 43, exactCount: 8, diffCount: 0, winnerCount: 0 },
+    ) > 0);
   });
 });
