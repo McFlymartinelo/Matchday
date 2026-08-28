@@ -1,10 +1,45 @@
 import jwt from 'jsonwebtoken';
 import { get } from '../db/connection.js';
 
-const SECRET = process.env.JWT_SECRET || 'dev-secret';
+const WEAK_SECRETS = new Set(['', 'dev-secret', 'change-me-in-production']);
+
+export function getJwtSecret() {
+  return process.env.JWT_SECRET?.trim() || '';
+}
+
+export function assertJwtSecret() {
+  const secret = getJwtSecret();
+  if (process.env.NODE_ENV === 'production' && WEAK_SECRETS.has(secret)) {
+    throw new Error('JWT_SECRET doit être défini avec une valeur forte en production');
+  }
+}
+
+function signingSecret() {
+  const secret = getJwtSecret();
+  if (process.env.NODE_ENV === 'production' && WEAK_SECRETS.has(secret)) {
+    throw new Error('JWT_SECRET doit être défini avec une valeur forte en production');
+  }
+  return secret || 'dev-secret';
+}
 
 export function signToken(user) {
-  return jwt.sign({ id: user.id, username: user.username, isAdmin: !!user.is_admin }, SECRET, { expiresIn: '30d' });
+  return jwt.sign({ id: user.id, username: user.username, isAdmin: !!user.is_admin }, signingSecret(), { expiresIn: '30d' });
+}
+
+export function signOtpToken(user, otpPurpose) {
+  return jwt.sign(
+    { id: user.id, purpose: 'otp', otpPurpose },
+    signingSecret(),
+    { expiresIn: '15m' }
+  );
+}
+
+export function readOtpToken(token) {
+  const payload = jwt.verify(token, signingSecret());
+  if (payload.purpose !== 'otp' || !payload.id) {
+    throw new Error('Token OTP invalide');
+  }
+  return payload;
 }
 
 export function authRequired(req, res, next) {
@@ -13,7 +48,7 @@ export function authRequired(req, res, next) {
     return res.status(401).json({ error: 'Authentification requise' });
   }
   try {
-    req.user = jwt.verify(header.slice(7), SECRET);
+    req.user = jwt.verify(header.slice(7), signingSecret());
     next();
   } catch {
     return res.status(401).json({ error: 'Token invalide' });

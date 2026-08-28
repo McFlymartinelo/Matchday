@@ -1,4 +1,4 @@
-import { standings, teamCrest, compColors, compLogoHtml, showToast, buildTeamLogoMap, normTeamName, compId, sameCompId } from './api.js';
+import { standings, teamCrest, compColors, compLogoHtml, showToast, buildTeamLogoMap, normTeamName, compId, sameCompId, escapeHtml } from './api.js';
 
 const ZONE_LEGEND = [
   { id: 'cl', label: 'LDC' },
@@ -55,12 +55,12 @@ function renderLeagueTable(comp, rows, logoMap) {
       const gdStr = gd > 0 ? `+${gd}` : String(gd);
       const zone = zoneBucket(r.zone_key, r.zone_label);
       const teamId = r.team_id ?? logoMap.get(normTeamName(r.team_name));
-      const zoneTitle = r.zone_label ? ` title="${r.zone_label}"` : '';
+      const zoneTitle = r.zone_label ? ` title="${escapeHtml(r.zone_label)}"` : '';
       return `<div class="league-row${zone ? ` zone-${zone}` : ''}"${zoneTitle}>
         <span class="league-pos">${r.position}</span>
         <span class="league-team">
           ${teamCrest(r.team_name, comp.code, teamId)}
-          <span class="league-team-name" title="${r.team_name}">${r.team_name}</span>
+          <span class="league-team-name" title="${escapeHtml(r.team_name)}">${escapeHtml(r.team_name)}</span>
         </span>
         <span class="league-stat">${r.played ?? 0}</span>
         <span class="league-stat ${gd > 0 ? 'positive' : gd < 0 ? 'negative' : ''}">${gdStr}</span>
@@ -101,7 +101,7 @@ export async function renderChampionships(el, state) {
       ${(filtered.length ? filtered : data).map(d => renderLeagueTable(d.competition, d.rows, logoMap)).join('')}
     `;
   } catch (err) {
-    el.innerHTML = `<div class="section-card"><div class="empty-state">${err.message}</div></div>`;
+    el.innerHTML = `<div class="section-card"><div class="empty-state">${escapeHtml(err.message)}</div></div>`;
     showToast(err.message);
   }
 }

@@ -105,8 +105,13 @@ export function renderAvatarHtml(avatar, displayName, profileColor = '#6B3FD6', 
   if (isClubAvatar(avatar)) {
     return renderClubCrestHtml(parseClubAvatar(avatar), { size: size === 'sm' ? 'sm' : 'lg' });
   }
-  if (avatar?.startsWith('http')) {
-    return `<img src="${avatar}" alt="" class="profile-avatar-img">`;
+  if (typeof avatar === 'string' && /^https?:\/\//i.test(avatar)) {
+    try {
+      const url = new URL(avatar);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        return `<img src="${url.href.replace(/"/g, '%22')}" alt="" class="profile-avatar-img">`;
+      }
+    } catch { /* ignore */ }
   }
   if (avatar && isEmojiAvatar(avatar)) return avatar;
   return initials(displayName);

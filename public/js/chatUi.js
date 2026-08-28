@@ -1,4 +1,4 @@
-import { chat } from './api.js';
+import { chat, escapeHtml } from './api.js';
 import { renderAvatarHtml } from './avatars.js';
 
 export const CHAT_REACTIONS = ['👍', '🔥', '😂', '🎯', '💪', '😱', '❤️', '🏆'];
@@ -33,20 +33,13 @@ function messageHtml(m, userId, userColor) {
   return `<div class="chat-msg ${mine ? 'mine' : 'other'}">
     ${!mine ? `<div class="chat-msg-head">
       <span class="chat-msg-avatar">${renderAvatarHtml(m.avatar, m.display_name, m.profile_color, 'sm')}</span>
-      <span class="chat-msg-name">${m.display_name}</span>
+      <span class="chat-msg-name">${escapeHtml(m.display_name)}</span>
       <span class="chat-msg-time">${time}</span>
     </div>` : ''}
     <div class="chat-bubble ${mine ? 'mine' : 'other'}" style="${bubbleStyle}">${escapeHtml(m.content)}</div>
     ${mine && time ? `<div class="chat-msg-time mine">${time}</div>` : ''}
     ${reactionBar(m.id, m.reactions, m.myReactions ?? [], mine)}
   </div>`;
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }
 
 export async function renderChatScreen(el, state) {

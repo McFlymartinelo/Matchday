@@ -13,7 +13,12 @@ let sqliteConfigured = false;
 export function getDb() {
   if (client) return client;
 
-  if (process.env.TURSO_DATABASE_URL) {
+  if (process.env.TEST_DB_PATH) {
+    const dataDir = join(__dirname, '../../data');
+    mkdirSync(dataDir, { recursive: true });
+    const dbFile = join(__dirname, '../..', process.env.TEST_DB_PATH);
+    client = createClient({ url: `file:${dbFile}` });
+  } else if (process.env.TURSO_DATABASE_URL) {
     client = createClient({
       url: process.env.TURSO_DATABASE_URL,
       authToken: process.env.TURSO_AUTH_TOKEN,
@@ -21,16 +26,13 @@ export function getDb() {
   } else {
     const dataDir = join(__dirname, '../../data');
     mkdirSync(dataDir, { recursive: true });
-    const dbFile = process.env.TEST_DB_PATH
-      ? join(__dirname, '../..', process.env.TEST_DB_PATH)
-      : join(dataDir, 'matchday.db');
-    client = createClient({ url: `file:${dbFile}` });
+    client = createClient({ url: `file:${join(dataDir, 'matchday.db')}` });
   }
   return client;
 }
 
 async function configureSqlite() {
-  if (sqliteConfigured || process.env.TURSO_DATABASE_URL) return;
+  if (sqliteConfigured || (process.env.TURSO_DATABASE_URL && !process.env.TEST_DB_PATH)) return;
   sqliteConfigured = true;
   const db = getDb();
   await db.execute('PRAGMA journal_mode = WAL');
@@ -87,6 +89,11 @@ async function ensureMatchColumns() {
   await addColumnIfMissing('official_standings', 'zone_key', 'TEXT');
   await addColumnIfMissing('official_standings', 'zone_label', 'TEXT');
   await addColumnIfMissing('official_standings', 'zone_type', 'TEXT');
+  await addColumnIfMissing('users', 'email', 'TEXT');
+  await addColumnIfMissing('users', 'email_verified', 'INTEGER DEFAULT 0');
+  try {
+    await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
+  } catch { /* index déjà présent ou non supporté */ }
 }
 
 async function addColumnIfMissing(table, column, type) {

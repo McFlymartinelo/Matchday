@@ -4,14 +4,16 @@
   "description": "Application web de pronostics football entre amis",
   "type": "module",
   "main": "server/index.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "migrate": "node server/db/migrate.js",
     "seed": "node server/db/seed.js",
     "setup": "npm run migrate && npm run seed",
-    "test": "node --test",
+    "test": "node --test tests/**/*.js",
     "test:notifications": "node scripts/test-notification-reminder.js",
     "admin:promote": "node scripts/promote-admin.js",
     "copy:predictions": "node scripts/copy-predictions.js",
@@ -25,6 +27,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
+    "nodemailer": "^9.0.5",
     "web-push": "^3.6.7"
   }
 }

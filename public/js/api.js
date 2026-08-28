@@ -50,6 +50,15 @@ export async function api(path, options = {}) {
   return data;
 }
 
+export function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function apiPublic(path) {
   const res = await fetch(`${API}${path}`);
   const data = await res.json().catch(() => ({}));
@@ -60,7 +69,9 @@ export async function apiPublic(path) {
 export const auth = {
   register: (body) => api('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body) => api('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
-  resetPassword: (body) => api('/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
+  verifyOtp: (body) => api('/auth/verify-otp', { method: 'POST', body: JSON.stringify(body) }),
+  resendOtp: (body) => api('/auth/resend-otp', { method: 'POST', body: JSON.stringify(body) }),
+  changePassword: (body) => api('/auth/change-password', { method: 'POST', body: JSON.stringify(body) }),
   me: () => api('/auth/me'),
   updateProfile: (body) => api('/auth/me', { method: 'PATCH', body: JSON.stringify(body) }),
   logout: () => setToken(null),
@@ -281,5 +292,6 @@ export function formatCountdown(kickoff) {
 }
 
 export function initials(name) {
-  return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const raw = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  return escapeHtml(raw);
 }

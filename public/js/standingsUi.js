@@ -1,4 +1,4 @@
-import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId } from './api.js';
+import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml } from './api.js';
 import { renderAvatarHtml, clubCrestLetters } from './avatars.js';
 
 function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, showExtras = true } = {}) {
@@ -16,7 +16,7 @@ function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, 
       <div class="standings-player">
         ${renderAvatarHtml(r.avatar, r.displayName, r.profileColor, 'sm')}
         <div class="standings-player-text">
-          <span class="standings-name">${r.displayName}</span>
+          <span class="standings-name">${escapeHtml(r.displayName)}</span>
           ${extras ? `<span class="standings-sub">${extras}</span>` : ''}
         </div>
       </div>
@@ -42,7 +42,7 @@ function podiumHtml(rows, currentUserId, cc) {
       <div class="podium-player">
         <div class="podium-medal">${place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'}</div>
         ${renderAvatarHtml(r.avatar, r.displayName, r.profileColor, 'sm')}
-        <div class="podium-name">${r.displayName.split(' ')[0]}</div>
+        <div class="podium-name">${escapeHtml(r.displayName.split(' ')[0])}</div>
         <div class="podium-pts">${pts}<span>pts</span></div>
       </div>
       <div class="podium-step podium-step-${place}">
@@ -101,7 +101,7 @@ function avgChartHtml(members) {
       return `<div class="stats-bar-col">
         <div class="stats-bar-value">${m.avgPerMatch} pt/match</div>
         <div class="stats-bar-track"><div class="stats-bar-fill" style="height:${h}%"></div></div>
-        <div class="stats-bar-label">${m.displayName.split(' ')[0]}</div>
+        <div class="stats-bar-label">${escapeHtml(m.displayName.split(' ')[0])}</div>
       </div>`;
     }).join('')}</div>
   </div>`;
@@ -159,7 +159,7 @@ function lastMatchdayGridHtml(lastMatchdayByComp, members, currentUserId) {
     return `<tr class="md-player-row ${isMe ? 'me' : ''}">
       <th class="md-player-col">
         <span class="md-player-cell">${renderAvatarHtml(m.avatar, m.displayName, m.profileColor, 'sm')}
-        <span class="md-player-name">${m.displayName}</span></span>
+        <span class="md-player-name">${escapeHtml(m.displayName)}</span></span>
       </th>
       ${cells}
     </tr>`;
@@ -197,7 +197,7 @@ function playerCardsHtml(members, currentUserId) {
             ${renderAvatarHtml(m.avatar, m.displayName, m.profileColor)}
           </div>
           <div>
-            <div class="player-card-name">${m.displayName}</div>
+            <div class="player-card-name">${escapeHtml(m.displayName)}</div>
             <div class="player-card-rank">#${m.rank} · ${m.totalPoints} pts</div>
           </div>
         </div>
@@ -341,7 +341,7 @@ function duelSelectorHtml(members, userIdA, userIdB) {
   const b = members.find(m => m.id === userIdB);
   const side = (m, key) => `<button class="duel-player-btn" data-duel-side="${key}">
     <span class="duel-avatar" style="background:${m.profile_color || '#6B3FD6'}">${renderAvatarHtml(m.avatar, m.display_name, m.profile_color)}</span>
-    <span class="duel-player-name">${m.display_name}
+    <span class="duel-player-name">${escapeHtml(m.display_name)}
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#8B85A3" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </span>
   </button>`;
@@ -381,7 +381,7 @@ function duelResultHtml(data) {
   const leadDiff = Math.abs(duelScore.a - duelScore.b);
   const leadHtml = duelScore.a === duelScore.b
     ? `<div class="duel-lead">🤝 Duel à égalité</div>`
-    : `<div class="duel-lead">🏆 ${duelScore.a > duelScore.b ? userA.displayName : userB.displayName} mène le duel de ${leadDiff} journée${leadDiff > 1 ? 's' : ''}</div>`;
+    : `<div class="duel-lead">🏆 ${duelScore.a > duelScore.b ? escapeHtml(userA.displayName) : escapeHtml(userB.displayName)} mène le duel de ${leadDiff} journée${leadDiff > 1 ? 's' : ''}</div>`;
 
   const historyRows = [...rounds].reverse().map(r => `<div class="duel-history-row">
     <span class="duel-history-round">${r.label}</span>
@@ -393,7 +393,7 @@ function duelResultHtml(data) {
     const cc = compColors(lastMatch.compCode);
     const predRow = (u, side) => `<div class="duel-pred-row ${side.detail === 'exact' ? 'win' : ''}">
       <span class="duel-pred-avatar" style="background:${u.profileColor || '#6B3FD6'}">${renderAvatarHtml(u.avatar, u.displayName, u.profileColor)}</span>
-      <span class="duel-pred-text">${u.displayName} a joué ${side.homeScore}-${side.awayScore}</span>
+      <span class="duel-pred-text">${escapeHtml(u.displayName)} a joué ${side.homeScore}-${side.awayScore}</span>
       <span class="duel-pred-pts">+${side.points ?? 0} pt${(side.points ?? 0) > 1 ? 's' : ''}</span>
     </div>`;
     return `<div class="section-card">
@@ -422,12 +422,12 @@ function duelResultHtml(data) {
       <div class="duel-score-row">
         <div class="duel-score-side">
           <span class="duel-score-num a">${duelScore.a}</span>
-          <span class="duel-score-name">${userA.displayName}</span>
+          <span class="duel-score-name">${escapeHtml(userA.displayName)}</span>
         </div>
         <span class="duel-score-sep">—</span>
         <div class="duel-score-side">
           <span class="duel-score-num b">${duelScore.b}</span>
-          <span class="duel-score-name">${userB.displayName}</span>
+          <span class="duel-score-name">${escapeHtml(userB.displayName)}</span>
         </div>
       </div>
       <div class="duel-bar"><span class="a" style="width:${pctA}%"></span><span class="b" style="width:${100 - pctA}%"></span></div>
@@ -438,8 +438,8 @@ function duelResultHtml(data) {
       <div class="label">Stats comparées</div>
       <div class="duel-compare-grid">
         <div></div>
-        <div class="duel-compare-head"><span class="duel-compare-avatar" style="background:${userA.profileColor || '#6B3FD6'}">${renderAvatarHtml(userA.avatar, userA.displayName, userA.profileColor)}</span><span class="name">${userA.displayName}</span></div>
-        <div class="duel-compare-head"><span class="duel-compare-avatar" style="background:${userB.profileColor || '#6B3FD6'}">${renderAvatarHtml(userB.avatar, userB.displayName, userB.profileColor)}</span><span class="name">${userB.displayName}</span></div>
+        <div class="duel-compare-head"><span class="duel-compare-avatar" style="background:${userA.profileColor || '#6B3FD6'}">${renderAvatarHtml(userA.avatar, userA.displayName, userA.profileColor)}</span><span class="name">${escapeHtml(userA.displayName)}</span></div>
+        <div class="duel-compare-head"><span class="duel-compare-avatar" style="background:${userB.profileColor || '#6B3FD6'}">${renderAvatarHtml(userB.avatar, userB.displayName, userB.profileColor)}</span><span class="name">${escapeHtml(userB.displayName)}</span></div>
         <div class="duel-compare-sep"></div>
         ${duelCompareRow('Points cumulés', stats.a.points, stats.b.points)}
         ${duelCompareRow('Moy. pts/match', stats.a.avgPerMatch, stats.b.avgPerMatch)}
@@ -451,8 +451,8 @@ function duelResultHtml(data) {
     <div class="section-card">
       <div class="label">Détail par type de pari</div>
       <div class="duel-subhint">Répartition des ${commonMatchesCount} pronostics communs</div>
-      <div class="duel-breakdown-row"><span class="duel-breakdown-name">${userA.displayName}</span>${duelBreakdownBarHtml(stats.a, commonMatchesCount)}</div>
-      <div class="duel-breakdown-row"><span class="duel-breakdown-name">${userB.displayName}</span>${duelBreakdownBarHtml(stats.b, commonMatchesCount)}</div>
+      <div class="duel-breakdown-row"><span class="duel-breakdown-name">${escapeHtml(userA.displayName)}</span>${duelBreakdownBarHtml(stats.a, commonMatchesCount)}</div>
+      <div class="duel-breakdown-row"><span class="duel-breakdown-name">${escapeHtml(userB.displayName)}</span>${duelBreakdownBarHtml(stats.b, commonMatchesCount)}</div>
       <div class="duel-legend">
         <div class="duel-legend-item"><span class="duel-legend-dot" style="background:var(--l1)"></span>Exact</div>
         <div class="duel-legend-item"><span class="duel-legend-dot" style="background:#C9701F"></span>Écart</div>

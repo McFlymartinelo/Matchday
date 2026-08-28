@@ -1,7 +1,9 @@
-const CACHE = 'matchday-v18';
+const CACHE = 'matchday-v19';
 
 self.addEventListener('install', (e) => {
-  self.skipWaiting();
+  e.waitUntil(
+    caches.open(CACHE).then(cache => cache.addAll(['/index.html', '/manifest.json'])).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -20,7 +22,11 @@ self.addEventListener('fetch', (e) => {
 
   if (isNavigate) {
     e.respondWith(
-      fetch(e.request).catch(() => caches.match('/index.html'))
+      fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(cache => cache.put('/index.html', copy));
+        return res;
+      }).catch(() => caches.match('/index.html'))
     );
     return;
   }

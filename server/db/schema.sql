@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   display_name TEXT NOT NULL,
+  email TEXT UNIQUE,
+  email_verified INTEGER DEFAULT 0,
   avatar TEXT DEFAULT '⚽',
   profile_color TEXT DEFAULT '#6B3FD6',
   is_admin INTEGER DEFAULT 0,
@@ -231,6 +233,19 @@ CREATE TABLE IF NOT EXISTS official_standings (
   UNIQUE(competition_id, season, team_name)
 );
 
+CREATE TABLE IF NOT EXISTS email_otps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_otps_user ON email_otps(user_id, purpose);
 CREATE INDEX IF NOT EXISTS idx_matches_competition ON matches(competition_id, season, matchday);
 CREATE INDEX IF NOT EXISTS idx_predictions_group ON predictions(group_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_group_competitions ON group_competitions(group_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_group ON chat_messages(group_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_reactions_message ON chat_reactions(message_id);

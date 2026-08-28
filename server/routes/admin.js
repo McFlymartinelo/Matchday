@@ -33,6 +33,18 @@ router.delete('/users/:id', authRequired, adminRequired, async (req, res) => {
   res.json({ ok: true });
 });
 
+router.post('/users/:id/reset-password', authRequired, adminRequired, async (req, res) => {
+  const { password } = req.body ?? {};
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ error: 'Mot de passe trop court — 6 caractères minimum' });
+  }
+  const user = await get('SELECT id FROM users WHERE id = ?', [req.params.id]);
+  if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+  const hash = await bcrypt.hash(String(password), 10);
+  await run('UPDATE users SET password_hash = ? WHERE id = ?', [hash, user.id]);
+  res.json({ ok: true });
+});
+
 router.post('/sync/fixtures', authRequired, adminRequired, async (_req, res) => {
   const total = await syncAllCompetitions();
   res.json({ ok: true, matchCount: total });

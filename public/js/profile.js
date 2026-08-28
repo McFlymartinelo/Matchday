@@ -1,4 +1,4 @@
-import { auth, groups, standings, specialBets, showToast, compLogoHtml } from './api.js';
+import { auth, groups, standings, specialBets, showToast, compLogoHtml, escapeHtml } from './api.js';
 import { getTheme, setTheme } from './theme.js';
 
 import { computeBadges, formatRankingExport } from './badges.js';
@@ -197,9 +197,9 @@ export async function renderProfile(el, state, renderApp) {
 
         <div class="profile-hero-info">
 
-          <div class="profile-name-edit" id="profile-name-display" title="Clique pour modifier">${state.user.displayName}</div>
+          <div class="profile-name-edit" id="profile-name-display" title="Clique pour modifier">${escapeHtml(state.user.displayName)}</div>
 
-          <input class="profile-name-input hidden" id="profile-name-input" value="${state.user.displayName}">
+          <input class="profile-name-input hidden" id="profile-name-input" value="${escapeHtml(state.user.displayName)}">
 
           <div class="profile-hint">Clique sur ton pseudo pour le modifier</div>
 
