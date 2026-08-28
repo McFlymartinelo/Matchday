@@ -78,6 +78,7 @@ export async function migrate() {
     await run(stmt);
   }
   await ensureMatchColumns();
+  await ensureOtpSchema();
 }
 
 async function ensureMatchColumns() {
@@ -94,6 +95,43 @@ async function ensureMatchColumns() {
   try {
     await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
   } catch { /* index déjà présent ou non supporté */ }
+}
+
+async function ensureOtpSchema() {
+  const cols = await all('PRAGMA table_info(email_otps)');
+  if (!cols.length) return;
+
+  await addColumnIfMissing('email_otps', 'email', 'TEXT');
+  const refreshed = await all('PRAGMA table_info(email_otps)');
+  const userIdCol = refreshed.find(c => c.name === 'user_id');
+  const notNull = Number(userIdCol?.notnull || 0) === 1;
+  if (!notNull) {
+    try {
+      await run('CREATE INDEX IF NOT EXISTS idx_email_otps_email ON email_otps(email, purpose)');
+    } catch { /* index déjà présent */ }
+    return;
+  }
+
+  await run('DROP TABLE IF EXISTS email_otps_v2');
+  await run(`CREATE TABLE email_otps_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    purpose TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  await run(`INSERT INTO email_otps_v2 (id, user_id, email, purpose, code_hash, expires_at, attempts, created_at)
+    SELECT o.id, o.user_id, COALESCE(NULLIF(o.email, ''), u.email, 'unknown@invalid'),
+           o.purpose, o.code_hash, o.expires_at, o.attempts, o.created_at
+    FROM email_otps o
+    LEFT JOIN users u ON u.id = o.user_id`);
+  await run('DROP TABLE email_otps');
+  await run('ALTER TABLE email_otps_v2 RENAME TO email_otps');
+  await run('CREATE INDEX IF NOT EXISTS idx_email_otps_user ON email_otps(user_id, purpose)');
+  await run('CREATE INDEX IF NOT EXISTS idx_email_otps_email ON email_otps(email, purpose)');
 }
 
 async function addColumnIfMissing(table, column, type) {

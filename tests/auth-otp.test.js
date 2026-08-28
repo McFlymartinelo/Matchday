@@ -81,7 +81,7 @@ describe('Auth — email + OTP', () => {
     assert.ok(registered.data.devOtp);
     assert.match(registered.data.emailMasked, /m\*\*\*@example\.com/);
 
-    const wrong = registered.data.devOtp === '0000' ? '1111' : '0000';
+    const wrong = registered.data.devOtp === '000000' ? '111111' : '000000';
     const bad = await jsonFetch(base, '/api/auth/verify-otp', {
       method: 'POST',
       body: { otpToken: registered.data.otpToken, code: wrong },
@@ -140,5 +140,71 @@ describe('Auth — email + OTP', () => {
     assert.equal(resent.status, 200, resent.data.error);
     assert.ok(resent.data.devOtp);
     assert.notEqual(resent.data.devOtp, first);
+  });
+
+  it('envoie un OTP par e-mail puis vérifie le code', async () => {
+    const sent = await jsonFetch(base, '/api/auth/send-otp', {
+      method: 'POST',
+      body: { email: 'otpflow@example.com' },
+    });
+    assert.equal(sent.status, 200, sent.data.error);
+    assert.equal(sent.data.ok, true);
+    assert.ok(sent.data.devOtp);
+    assert.match(sent.data.devOtp, /^\d{6}$/);
+    assert.match(sent.data.emailMasked, /o\*\*\*@example\.com/);
+
+    const wrong = sent.data.devOtp === '000000' ? '111111' : '000000';
+    const bad = await jsonFetch(base, '/api/auth/verify-otp', {
+      method: 'POST',
+      body: { email: 'otpflow@example.com', otp: wrong },
+    });
+    assert.equal(bad.status, 400);
+
+    const verified = await jsonFetch(base, '/api/auth/verify-otp', {
+      method: 'POST',
+      body: { email: 'otpflow@example.com', otp: sent.data.devOtp },
+    });
+    assert.equal(verified.status, 200, verified.data.error);
+    assert.equal(verified.data.needsProfile, true);
+    assert.ok(verified.data.emailToken);
+
+    const created = await jsonFetch(base, '/api/auth/register', {
+      method: 'POST',
+      body: {
+        username: 'otpflow',
+        password: 'secret1',
+        email: 'otpflow@example.com',
+        emailToken: verified.data.emailToken,
+      },
+    });
+    assert.equal(created.status, 201, created.data.error);
+    assert.ok(created.data.token);
+    assert.equal(created.data.user.emailVerified, true);
+  });
+
+  it('connecte un compte existant via send-otp + verify-otp', async () => {
+    const sent = await jsonFetch(base, '/api/auth/send-otp', {
+      method: 'POST',
+      body: { email: 'marie@example.com' },
+    });
+    assert.equal(sent.status, 200, sent.data.error);
+    assert.ok(sent.data.devOtp);
+
+    const verified = await jsonFetch(base, '/api/auth/verify-otp', {
+      method: 'POST',
+      body: { email: 'marie@example.com', otp: sent.data.devOtp },
+    });
+    assert.equal(verified.status, 200, verified.data.error);
+    assert.ok(verified.data.token);
+    assert.equal(verified.data.user.email, 'marie@example.com');
+  });
+
+  it('refuse send-otp sans e-mail valide', async () => {
+    const { status, data } = await jsonFetch(base, '/api/auth/send-otp', {
+      method: 'POST',
+      body: { email: 'pas-un-mail' },
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /mail/i);
   });
 });

@@ -1,21 +1,33 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { get, run } from '../db/connection.js';
-import { authRequired, signToken, signOtpToken, readOtpToken } from '../middleware/auth.js';
+import {
+  authRequired,
+  signToken,
+  signOtpToken,
+  readOtpToken,
+  signEmailVerifiedToken,
+  readEmailVerifiedToken,
+} from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import {
   canResendOtp,
+  canResendOtpByEmail,
   issueOtp,
+  issueOtpForEmail,
   maskEmail,
   normalizeEmail,
   shouldEchoOtp,
   validateEmail,
+  validateOtpCode,
   verifyOtp,
+  verifyOtpByEmail,
 } from '../lib/otp.js';
 import { mailerConfigured, sendOtpEmail } from '../lib/mailer.js';
 
 const router = Router();
 const authBurst = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+const sendOtpBurst = rateLimit({ windowMs: 15 * 60 * 1000, max: 8 });
 
 function validatePassword(password) {
   if (!password) return 'Entre un mot de passe';
@@ -47,21 +59,38 @@ function otpPayload(user, otpPurpose, code, channel = 'email') {
   return payload;
 }
 
-async function startOtp(user, purpose) {
-  const { code } = await issueOtp(user.id, purpose);
-  const channel = 'email';
+async function deliverOtp(email, code, purpose) {
   if (mailerConfigured()) {
     try {
-      await sendOtpEmail(user.email, code, purpose);
+      await sendOtpEmail(email, code, purpose);
+      return 'email';
     } catch (err) {
       console.error('OTP mail:', err.message);
-      throw new Error("Impossible d'envoyer le mail. Réessaie dans un instant.");
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error("Impossible d'envoyer le mail. Réessaie dans un instant.");
+      }
+      console.warn(`[OTP] SMTP indisponible — code ${code} pour ${maskEmail(email)} (local seulement)`);
+      return 'email';
     }
-  } else if (process.env.NODE_ENV === 'production') {
-    throw new Error('Envoi du code par mail non configuré');
-  } else if (process.env.NODE_ENV !== 'test') {
-    console.warn(`[OTP] Pas de mailer — code ${code} pour ${maskEmail(user.email)} (local seulement)`);
   }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Envoi du code par mail non configuré');
+  }
+  if (process.env.NODE_ENV !== 'test') {
+    console.warn(`[OTP] Pas de mailer — code ${code} pour ${maskEmail(email)} (local seulement)`);
+  }
+  return 'email';
+}
+
+function sendOtpPayload(email, code, channel = 'email') {
+  const payload = { ok: true, emailMasked: maskEmail(email), channel };
+  if (shouldEchoOtp()) payload.devOtp = code;
+  return payload;
+}
+
+async function startOtp(user, purpose) {
+  const { code } = await issueOtp(user.id, purpose);
+  const channel = await deliverOtp(user.email, code, purpose);
   return otpPayload(user, purpose, code, channel);
 }
 
@@ -84,11 +113,25 @@ router.post('/register', authBurst, async (req, res) => {
     const existingMail = await get('SELECT id FROM users WHERE email = ?', [mail]);
     if (existingMail) return res.status(409).json({ error: 'Cette adresse mail est déjà utilisée' });
 
+    let verified = 0;
+    const emailToken = req.body?.emailToken;
+    if (emailToken) {
+      try {
+        const payload = readEmailVerifiedToken(emailToken);
+        if (payload.email !== mail) {
+          return res.status(400).json({ error: 'Email non vérifié' });
+        }
+        verified = 1;
+      } catch {
+        return res.status(401).json({ error: 'Vérification email expirée — renvoie un code' });
+      }
+    }
+
     const hash = await bcrypt.hash(password, 10);
     const name = displayName || username;
     const result = await run(
-      'INSERT INTO users (username, password_hash, display_name, email, email_verified) VALUES (?, ?, ?, ?, 0)',
-      [login, hash, name, mail]
+      'INSERT INTO users (username, password_hash, display_name, email, email_verified) VALUES (?, ?, ?, ?, ?)',
+      [login, hash, name, mail, verified]
     );
 
     const user = {
@@ -96,9 +139,12 @@ router.post('/register', authBurst, async (req, res) => {
       username: login,
       display_name: name,
       email: mail,
-      email_verified: 0,
+      email_verified: verified,
       is_admin: 0,
     };
+    if (verified) {
+      return res.status(201).json({ token: signToken(user), user: publicUser(user) });
+    }
     res.status(201).json(await startOtp(user, 'register'));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -128,9 +174,60 @@ router.post('/login', authBurst, async (req, res) => {
   }
 });
 
+router.post('/send-otp', sendOtpBurst, async (req, res) => {
+  try {
+    const emailError = validateEmail(req.body?.email);
+    if (emailError) return res.status(400).json({ error: emailError });
+    const mail = normalizeEmail(req.body.email);
+    const user = await get('SELECT * FROM users WHERE email = ?', [mail]);
+    const purpose = user ? 'login' : 'register';
+
+    const wait = user
+      ? await canResendOtp(user.id, purpose)
+      : await canResendOtpByEmail(mail, purpose);
+    if (!wait.ok) {
+      return res.status(429).json({
+        error: `Attends encore ${Math.ceil(wait.waitMs / 1000)}s`,
+        retryAfter: Math.ceil(wait.waitMs / 1000),
+      });
+    }
+
+    const { code } = await issueOtpForEmail(mail, purpose, user?.id ?? null);
+    await deliverOtp(mail, code, purpose);
+    res.json(sendOtpPayload(mail, code));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/verify-otp', authBurst, async (req, res) => {
   try {
-    const { otpToken, code } = req.body ?? {};
+    const { otpToken, email } = req.body ?? {};
+    const submitted = String(req.body?.otp ?? req.body?.code ?? '').trim();
+    const codeError = validateOtpCode(submitted);
+    if (codeError) return res.status(400).json({ error: codeError });
+
+    if (email) {
+      const emailError = validateEmail(email);
+      if (emailError) return res.status(400).json({ error: emailError });
+      const mail = normalizeEmail(email);
+      const result = await verifyOtpByEmail(mail, submitted);
+      if (!result.ok) return res.status(400).json({ error: result.error });
+
+      const user = await get('SELECT * FROM users WHERE email = ?', [mail]);
+      if (user) {
+        await run('UPDATE users SET email_verified = 1 WHERE id = ?', [user.id]);
+        const fresh = await get('SELECT * FROM users WHERE id = ?', [user.id]);
+        return res.json({ token: signToken(fresh), user: publicUser(fresh) });
+      }
+      return res.json({
+        needsProfile: true,
+        email: mail,
+        emailMasked: maskEmail(mail),
+        emailToken: signEmailVerifiedToken(mail),
+      });
+    }
+
     if (!otpToken) return res.status(400).json({ error: 'Session OTP manquante' });
     let payload;
     try {
@@ -139,7 +236,7 @@ router.post('/verify-otp', authBurst, async (req, res) => {
       return res.status(401).json({ error: 'Code expiré — reconnecte-toi' });
     }
 
-    const result = await verifyOtp(payload.id, payload.otpPurpose, code);
+    const result = await verifyOtp(payload.id, payload.otpPurpose, submitted);
     if (!result.ok) return res.status(400).json({ error: result.error });
 
     if (payload.otpPurpose === 'register') {

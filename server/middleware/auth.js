@@ -42,6 +42,22 @@ export function readOtpToken(token) {
   return payload;
 }
 
+export function signEmailVerifiedToken(email) {
+  return jwt.sign(
+    { purpose: 'email-verified', email: String(email || '').trim().toLowerCase() },
+    signingSecret(),
+    { expiresIn: '30m' }
+  );
+}
+
+export function readEmailVerifiedToken(token) {
+  const payload = jwt.verify(token, signingSecret());
+  if (payload.purpose !== 'email-verified' || !payload.email) {
+    throw new Error('Token email invalide');
+  }
+  return payload;
+}
+
 export function authRequired(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {

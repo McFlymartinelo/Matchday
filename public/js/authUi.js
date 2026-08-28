@@ -1,4 +1,4 @@
-import { auth, groups, escapeHtml } from './api.js?v=54';
+import { auth, groups, escapeHtml } from './api.js?v=55';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -125,8 +125,10 @@ function showSuccessThen(root, { title, sub, onContinue }) {
   setTimeout(go, 1700);
 }
 
+const OTP_LEN = 6;
+
 function otpDigitsFrom(value) {
-  return String(value || '').replace(/\D/g, '').slice(0, 4);
+  return String(value || '').replace(/\D/g, '').slice(0, OTP_LEN);
 }
 
 function paintOtpSlots(slots, value) {
@@ -134,7 +136,7 @@ function paintOtpSlots(slots, value) {
   slots.forEach((slot, i) => {
     slot.textContent = digits[i] || '';
     slot.classList.toggle('is-filled', !!digits[i]);
-    slot.classList.toggle('is-active', i === Math.min(digits.length, 3));
+    slot.classList.toggle('is-active', i === Math.min(digits.length, OTP_LEN - 1));
   });
 }
 
@@ -208,10 +210,11 @@ function renderOtpView(wrap, ctx) {
   wrap.innerHTML = `
     <button type="button" class="auth-back" id="otp-back">← Retour</button>
     <h1 class="auth-title">Vérifie ton accès</h1>
-    <p class="auth-sub">Entre le code à 4 chiffres envoyé par mail à <strong>${escapeHtml(otp.emailMasked)}</strong></p>
+    <p class="auth-ok-msg" id="otp-sent">Code envoyé</p>
+    <p class="auth-sub">Entre le code à 6 chiffres envoyé par mail à <strong>${escapeHtml(otp.emailMasked)}</strong></p>
     <form id="otp-form" class="auth-form" autocomplete="one-time-code">
       <div class="otp-stage" id="otp-stage">
-        <input id="otp-hidden" class="otp-hidden" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="4" aria-label="Code à 4 chiffres">
+        <input id="otp-hidden" class="otp-hidden" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="${OTP_LEN}" aria-label="Code à 6 chiffres">
         <div class="otp-board" id="otp-board">
           <svg class="otp-orbit-path" viewBox="0 0 220 220" aria-hidden="true">
             <circle cx="110" cy="110" r="78" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 8"/>
@@ -221,9 +224,9 @@ function renderOtpView(wrap, ctx) {
             <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" stroke-width="1.7" stroke-dasharray="2 8"/>
           </svg>
           <div class="otp-wheel">
-            ${[0, 1, 2, 3].map(i => `
-              <div class="otp-arm" style="--a:${i * 90}deg">
-                <button type="button" class="otp-slot" data-i="${i}" aria-label="Chiffre ${i + 1}"></button>
+            ${[0, 1, 2, 3, 4, 5].map(i => `
+              <div class="otp-arm" style="--a:${i * 60}deg">
+                <button type="button" class="otp-slot otp-slot-6" data-i="${i}" aria-label="Chiffre ${i + 1}"></button>
               </div>`).join('')}
           </div>
         </div>
@@ -249,7 +252,7 @@ function renderOtpView(wrap, ctx) {
   const orbit = createOrbit(stage);
 
   const syncRing = () => {
-    const idx = Math.min(otpDigitsFrom(hidden.value).length, 3);
+    const idx = Math.min(otpDigitsFrom(hidden.value).length, OTP_LEN - 1);
     moveOtpRing(ring, slots[idx]);
   };
 
@@ -261,19 +264,21 @@ function renderOtpView(wrap, ctx) {
     hidden.value = otpDigitsFrom(hidden.value);
     paintOtpSlots(slots, hidden.value);
     syncRing();
-    if (hidden.value.length === 4) submitOtp();
+    if (hidden.value.length === OTP_LEN) submitOtp();
   });
 
   let busy = false;
   async function submitOtp() {
     const code = otpDigitsFrom(hidden.value);
-    if (code.length !== 4 || busy) return;
+    if (code.length !== OTP_LEN || busy) return;
     busy = true;
     errEl.classList.add('hidden');
     stage.classList.remove('is-bad');
     try {
       await orbit.windUp();
-      const data = await auth.verifyOtp({ otpToken: otp.otpToken, code });
+      const data = otp.email
+        ? await auth.verifyOtp({ email: otp.email, otp: code })
+        : await auth.verifyOtp({ otpToken: otp.otpToken, code });
       stage.classList.add('is-ok');
       await orbit.burst();
       await sleep(220);
@@ -325,14 +330,18 @@ function renderOtpView(wrap, ctx) {
   resendBtn.onclick = async () => {
     if (resendBtn.disabled) return;
     try {
-      const next = await auth.resendOtp({ otpToken: otp.otpToken });
-      otp.otpToken = next.otpToken;
+      const next = otp.email
+        ? await auth.sendOtp({ email: otp.email })
+        : await auth.resendOtp({ otpToken: otp.otpToken });
+      if (next.otpToken) otp.otpToken = next.otpToken;
       otp.devOtp = next.devOtp;
       otp.channel = next.channel;
       const banner = document.getElementById('otp-fill');
       if (banner && next.channel === 'sms' && next.devOtp) {
         banner.querySelector('strong').textContent = next.devOtp;
       }
+      const sentEl = document.getElementById('otp-sent');
+      if (sentEl) sentEl.textContent = 'Nouveau code envoyé';
       hidden.value = '';
       paintOtpSlots(slots, '');
       syncRing();
@@ -402,7 +411,7 @@ export async function renderAuthScreen({ setAuthPage, onLoggedIn }) {
           </div>
 
           <form id="auth-form" class="auth-form" novalidate>
-            <label class="auth-field">
+            <label class="auth-field" id="username-field">
               <span class="auth-label">Pseudo</span>
               <div class="auth-input-wrap">
                 <input id="username" class="auth-input" name="username" autocomplete="username" placeholder="ton pseudo" required>
@@ -416,7 +425,7 @@ export async function renderAuthScreen({ setAuthPage, onLoggedIn }) {
                 <span class="auth-input-icon auth-check">${CHECK}</span>
               </div>
             </label>
-            <label class="auth-field">
+            <label class="auth-field" id="password-field">
               <span class="auth-label">Mot de passe</span>
               <div class="auth-input-wrap">
                 <input id="password" class="auth-input" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>

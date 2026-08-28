@@ -16,6 +16,9 @@
     "test": "node --test tests/**/*.js",
     "test:notifications": "node scripts/test-notification-reminder.js",
     "admin:promote": "node scripts/promote-admin.js",
+    "admin:delete": "node scripts/promote-admin.js --delete",
+    "admin:groups": "node scripts/admin-groups.js",
+    "admin:delete-group": "node scripts/admin-groups.js --delete",
     "copy:predictions": "node scripts/copy-predictions.js",
     "vapid:keys": "node scripts/generate-vapid-keys.js"
   },

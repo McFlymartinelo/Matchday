@@ -1,6 +1,9 @@
-const FROM = process.env.MAIL_FROM?.trim() || 'Matchday <noreply@matchday.app>';
+const FROM = process.env.SMTP_FROM?.trim()
+  || process.env.MAIL_FROM?.trim()
+  || 'Matchday <noreply@matchday.app>';
 
 export function mailerConfigured() {
+  if (process.env.NODE_ENV === 'test') return false;
   return Boolean(process.env.SMTP_URL?.trim() || process.env.SMTP_HOST?.trim());
 }
 
@@ -24,20 +27,31 @@ function otpHtml(code, lead) {
 </body></html>`;
 }
 
+function isLocalSmtp(host, port) {
+  const h = String(host || '').toLowerCase();
+  return port === 1025 || h === 'localhost' || h === '127.0.0.1';
+}
+
 async function sendViaSmtp(to, subject, html, text) {
   const mod = await import('nodemailer');
   const nodemailer = mod.default ?? mod;
   const url = process.env.SMTP_URL?.trim();
   const transporter = url
     ? nodemailer.createTransport(url)
-    : nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT) === 465,
-      auth: process.env.SMTP_USER
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' }
-        : undefined,
-    });
+    : nodemailer.createTransport((() => {
+      const host = process.env.SMTP_HOST;
+      const port = Number(process.env.SMTP_PORT || 587);
+      const local = isLocalSmtp(host, port);
+      return {
+        host,
+        port,
+        secure: !local && (process.env.SMTP_SECURE === 'true' || port === 465),
+        tls: local ? { rejectUnauthorized: false } : undefined,
+        auth: process.env.SMTP_USER
+          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' }
+          : undefined,
+      };
+    })());
   await transporter.sendMail({ from: FROM, to, subject, html, text });
 }
 
