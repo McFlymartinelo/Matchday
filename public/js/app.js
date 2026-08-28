@@ -1,4 +1,4 @@
-import { auth, groups, matches, showToast, compId, sameCompId, loadSavedCompId, saveCompId, escapeHtml } from './api.js?v=54';
+import { auth, groups, matches, showToast, compId, sameCompId, loadSavedCompId, saveCompId, escapeHtml } from './api.js?v=55';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
@@ -9,7 +9,7 @@ import { renderStandingsScreen, compPillsHtml } from './standingsUi.js';
 import { renderMatches, resetMatchesUi } from './matchesUi.js?v=53';
 import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers, navigateToMatchDeepLink } from './notifications.js';
 import { startMatchReminders, stopMatchReminders, handlePushPayload } from './reminders.js';
-import { renderAuthScreen, renderPublicGroupOptions, formatMemberCount } from './authUi.js?v=3';
+import { renderAuthScreen, renderPublicGroupOptions, formatMemberCount } from './authUi.js?v=5';
 
 const state = {
   user: null,
@@ -586,13 +586,22 @@ function navHtml() {
     </button>`).join('')}</div>`;
 }
 
+function syncAppTopOffset() {
+  const bar = document.querySelector('.app-top');
+  const h = bar ? Math.round(bar.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty('--app-sticky-offset', `${h}px`);
+}
+
 async function renderApp() {
   setAuthPage(false);
   app.innerHTML = `<div class="app-shell">
-    ${headerHtml()}
-    ${state.screen === 'matches' || state.screen === 'championships' ? compPillsHtml(state) : ''}
+    <div class="app-top">
+      ${headerHtml()}
+      ${state.screen === 'matches' || state.screen === 'championships' ? compPillsHtml(state) : ''}
+    </div>
     <div id="screen-content"></div>
   </div>${navHtml()}`;
+  syncAppTopOffset();
 
   document.querySelectorAll('[data-nav]').forEach(btn => {
     btn.onclick = () => {
@@ -613,7 +622,12 @@ async function renderApp() {
   });
 
   requestAnimationFrame(() => {
-    document.querySelector('.comp-pill.active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    syncAppTopOffset();
+    const pill = document.querySelector('.comp-pill.active');
+    const grid = pill?.closest('.comp-grid');
+    if (!pill || !grid) return;
+    const left = pill.offsetLeft - (grid.clientWidth - pill.offsetWidth) / 2;
+    grid.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
   });
 
   attachHeaderEvents();

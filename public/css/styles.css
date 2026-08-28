@@ -85,6 +85,10 @@ html[data-theme="dark"] .reminder-banner {
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html {
+  scroll-padding-top: calc(var(--app-sticky-offset, 0px) + 8px);
+}
+
 body {
   background: var(--bg);
   font-family: 'Nunito', sans-serif;
@@ -97,6 +101,17 @@ body {
   margin: 0 auto;
   padding: 24px 12px 100px;
 }
+
+.app-top {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg);
+  margin: -24px -12px 8px;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 12px 10px;
+}
+.app-top .header { margin-bottom: 0; }
+.app-top .comp-grid { margin: 12px 0 0; }
 
 .hidden { display: none !important; }
 
@@ -599,6 +614,27 @@ body.auth-page {
 .otp-slot.is-filled {
   border-color: #2ee6a8;
   color: #2ee6a8;
+}
+
+.otp-slot-6 {
+  width: 42px;
+  height: 42px;
+  margin: -21px 0 0 -21px;
+  font-size: 17px;
+  border-radius: 12px;
+}
+
+.auth-ok-msg {
+  color: #34d399;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 8px;
+}
+
+.auth-input[readonly] {
+  opacity: .8;
+  cursor: default;
 }
 
 .otp-ring {

@@ -313,8 +313,7 @@ export async function renderMatches(el, state, hooks = {}) {
       const firstOpen = el.querySelector('.matchday-section.matchday-open');
       if (firstOpen) {
         requestAnimationFrame(() => {
-          const top = firstOpen.getBoundingClientRect().top + window.scrollY - 8;
-          window.scrollTo({ top, behavior: 'smooth' });
+          firstOpen.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       }
     }
