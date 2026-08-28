@@ -1,4 +1,4 @@
-const CACHE = 'matchday-v19';
+const CACHE = 'matchday-v20';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -15,6 +15,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 
   const isNavigate = e.request.mode === 'navigate'
