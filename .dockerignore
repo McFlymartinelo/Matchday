@@ -9,3 +9,7 @@ data
 .cursorrules
 .cursorignore
 CLAUDE.md
+tests
+graphify-out
+.claude
+.cursor
