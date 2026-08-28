@@ -290,9 +290,15 @@ export function filterValidLeagueEvents(events, allowedTeams) {
   return list;
 }
 
-/** Matchs à venir sur ~13 mois (récupère la saison suivante quand current_season BSD est en retard). */
+export function isReplacedEvent(event) {
+  return Boolean(event?.replaced_by) && (
+    event.status === 'postponed' || event.status === 'cancelled' || event.status === 'canceled'
+  );
+}
+
+/** Matchs récents + à venir (~14 jours d’historique, ~13 mois devant). */
 export async function collectUpcomingFixtures(leagueId) {
-  const from = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
   const to = new Date(Date.now() + 400 * 86400000).toISOString().slice(0, 10);
   const raw = await getEventsByDateRange(leagueId, from, to);
   // Calendrier officiel BSD — ne pas filtrer via le classement de la saison précédente
@@ -358,6 +364,9 @@ function mapStatus(status) {
     inprogress: 'live',
     finished: 'finished',
     penalties: 'live',
+    postponed: 'postponed',
+    cancelled: 'cancelled',
+    canceled: 'cancelled',
   };
   return map[status] ?? status ?? 'scheduled';
 }

@@ -47,7 +47,7 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
   try {
     let events = [];
     let seasonLabel = '2025-2026';
-    const from = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
     const to = new Date(Date.now() + 400 * 86400000).toISOString().slice(0, 10);
 
     try {
@@ -76,7 +76,8 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
     }
 
     let count = 0;
-    const normalized = dedupeBsdEvents(events, competitionId, normalizeWithOverrides);
+    const toImport = events.filter(e => !bsd.isReplacedEvent(e));
+    const normalized = dedupeBsdEvents(toImport, competitionId, normalizeWithOverrides);
     for (const norm of normalized) {
       const matchSeason = bsd.seasonLabelFromKickoff(norm.kickoff_at);
       await run(
