@@ -50,6 +50,10 @@ Ouvrir [http://localhost:3000](http://localhost:3000)
 | `NOTIFICATION_MORNING_TZ` | Fuseau horaire (défaut : `Europe/Paris`) | Non |
 | `SYNC_SECRET` | Header `x-sync-secret` pour `/api/sync/fixtures` | Non |
 | `PORT` | Port d'écoute (défaut : `3000`) | Non |
+| `SMTP_HOST` / `SMTP_PORT` | Serveur SMTP pour l'envoi des OTP (Brevo : `smtp-relay.brevo.com` / `587`) | Recommandé (sinon code OTP loggé en local, erreur en prod) |
+| `SMTP_USER` / `SMTP_PASS` | Identifiants SMTP (Brevo : login `xxxxx@smtp-brevo.com` + clé SMTP) | Recommandé |
+| `SMTP_FROM` | Expéditeur affiché — doit être un sender/domaine validé chez le fournisseur SMTP | Non (fallback `noreply@matchday.app`) |
+| `SMTP_URL` | Alternative à `SMTP_HOST`/`PORT`/`USER`/`PASS` (`smtps://user:pass@host:port`) | Non |
 
 ## Déploiement — Serveur Debian (Docker)
 
@@ -189,6 +193,29 @@ docker compose exec matchday npm run copy:predictions -- --user Breizhantifa --f
 ```
 
 L'utilisateur doit déjà être membre du groupe destination. Seuls les championnats suivis par les deux groupes sont copiés.
+
+### Tester l'envoi de mail (OTP via SMTP)
+
+Vérifie la config SMTP (`.env`) sans dépendre de l'UI — utile pour valider Brevo
+avant de compter sur l'envoi réel des OTP :
+
+```bash
+npm run mail:test                       # affiche juste la config détectée + verify()
+npm run mail:test -- --to toi@gmail.com # + envoie un email de test
+```
+
+Sur le serveur Docker :
+
+```bash
+docker compose exec matchday npm run mail:test -- --to toi@gmail.com
+```
+
+En local, `SMTP_HOST=localhost` + `SMTP_PORT=1025` cible [Mailpit](https://github.com/axllent/mailpit)
+(`docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit`, UI sur http://localhost:8025) — Mailpit
+n'envoie jamais vers Gmail. Pour un vrai envoi (local ou prod), utilise les identifiants
+SMTP de [Brevo](https://www.brevo.com) (`smtp-relay.brevo.com:587`, `SMTP_USER` du type
+`xxxxx@smtp-brevo.com`, `SMTP_PASS` = clé SMTP générée dans le dashboard — pas le mot de
+passe du compte, pas la clé API) et un `SMTP_FROM` avec un sender/domaine validé côté Brevo.
 
 ### Sync BSD manuelle
 

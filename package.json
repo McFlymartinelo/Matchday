@@ -20,7 +20,8 @@
     "admin:groups": "node scripts/admin-groups.js",
     "admin:delete-group": "node scripts/admin-groups.js --delete",
     "copy:predictions": "node scripts/copy-predictions.js",
-    "vapid:keys": "node scripts/generate-vapid-keys.js"
+    "vapid:keys": "node scripts/generate-vapid-keys.js",
+    "mail:test": "node scripts/test-mail.js"
   },
   "license": "MIT",
   "dependencies": {

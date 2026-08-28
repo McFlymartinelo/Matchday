@@ -32,26 +32,49 @@ function isLocalSmtp(host, port) {
   return port === 1025 || h === 'localhost' || h === '127.0.0.1';
 }
 
-async function sendViaSmtp(to, subject, html, text) {
+function smtpTransportOptions() {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const local = isLocalSmtp(host, port);
+  return {
+    host,
+    port,
+    secure: !local && (process.env.SMTP_SECURE === 'true' || port === 465),
+    tls: local ? { rejectUnauthorized: false } : undefined,
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' }
+      : undefined,
+  };
+}
+
+// Utilisé par le mailer et par scripts/test-mail.js (diagnostic Brevo/Mailpit).
+export function describeSmtpConfig() {
+  const url = process.env.SMTP_URL?.trim();
+  if (url) return { mode: 'url', url: url.replace(/:\/\/[^@]+@/, '://***@') };
+  const opts = smtpTransportOptions();
+  return {
+    mode: 'host',
+    host: opts.host || null,
+    port: opts.port,
+    secure: opts.secure,
+    local: isLocalSmtp(opts.host, opts.port),
+    user: opts.auth?.user || null,
+    hasPassword: Boolean(opts.auth?.pass),
+    from: FROM,
+  };
+}
+
+export async function createSmtpTransporter() {
   const mod = await import('nodemailer');
   const nodemailer = mod.default ?? mod;
   const url = process.env.SMTP_URL?.trim();
-  const transporter = url
+  return url
     ? nodemailer.createTransport(url)
-    : nodemailer.createTransport((() => {
-      const host = process.env.SMTP_HOST;
-      const port = Number(process.env.SMTP_PORT || 587);
-      const local = isLocalSmtp(host, port);
-      return {
-        host,
-        port,
-        secure: !local && (process.env.SMTP_SECURE === 'true' || port === 465),
-        tls: local ? { rejectUnauthorized: false } : undefined,
-        auth: process.env.SMTP_USER
-          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' }
-          : undefined,
-      };
-    })());
+    : nodemailer.createTransport(smtpTransportOptions());
+}
+
+async function sendViaSmtp(to, subject, html, text) {
+  const transporter = await createSmtpTransporter();
   await transporter.sendMail({ from: FROM, to, subject, html, text });
 }
 
@@ -62,4 +85,12 @@ export async function sendOtpEmail(email, code, purpose) {
   if (!mailerConfigured()) return null;
   await sendViaSmtp(email, subject, html, text);
   return 'email';
+}
+
+export async function sendTestEmail(to) {
+  if (!mailerConfigured()) throw new Error('SMTP non configuré (SMTP_HOST/SMTP_URL manquant dans .env)');
+  const subject = 'Matchday — test SMTP';
+  const html = otpHtml('000000', 'Ceci est un email de test (script test-mail.js), pas un vrai code.');
+  const text = 'Email de test Matchday — SMTP fonctionnel.';
+  await sendViaSmtp(to, subject, html, text);
 }
