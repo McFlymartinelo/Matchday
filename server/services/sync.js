@@ -171,8 +171,7 @@ export async function autoRecalculateFinishedMatches() {
        WHERE p.group_id = ?
          AND m.competition_id IN (${placeholders})
          AND m.status IN ('finished', 'FT', 'ended')
-         AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
-         AND p.points IS NULL`,
+         AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL`,
       [group.id, ...compRows.map(r => r.competition_id)]
     );
 
@@ -183,6 +182,11 @@ export async function autoRecalculateFinishedMatches() {
         Number(p.actual_home), Number(p.actual_away),
         scoring
       );
+      if (
+        p.points != null
+        && Number(p.points) === result.points
+        && p.points_detail === result.detail
+      ) continue;
       await run(
         'UPDATE predictions SET points = ?, points_detail = ? WHERE id = ?',
         [result.points, result.detail, p.id]
@@ -467,6 +471,7 @@ export async function syncAllCompetitions() {
     }
   }
   await invertPersistedVenueOverrides();
+  await autoRecalculateFinishedMatches();
   return total;
 }
 
