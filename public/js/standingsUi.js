@@ -1,6 +1,6 @@
 import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml } from './api.js?v=63';
 import { renderAvatarHtml, clubCrestLetters } from './avatars.js';
-import { mountRankingChart } from './rankingChart.js?v=63';
+import { mountRankingChart } from './rankingChart.js?v=65';
 
 function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, showExtras = true } = {}) {
   return rows.map((r, i) => {
@@ -124,7 +124,7 @@ function evoCompPillsHtml(comps, selectedId) {
   </div>`;
 }
 
-function evolutionCardHtml(history, comps, selectedCompId, mode, currentUserId) {
+function evolutionCardHtml(history, comps, selectedCompId, mode) {
   const rounds = history?.rounds ?? [];
   const pills = comps.length > 1 ? evoCompPillsHtml(comps, selectedCompId) : '';
   if (!rounds.length) {
@@ -136,22 +136,9 @@ function evolutionCardHtml(history, comps, selectedCompId, mode, currentUserId) 
     </div>`;
   }
 
-  const last = rounds[rounds.length - 1];
-  const memberMap = new Map((history.participants ?? []).map(p => [p.userId, p]));
-  const rows = last.rankings.map(r => {
-    const m = memberMap.get(r.userId) ?? {};
-    return {
-      userId: r.userId,
-      displayName: r.displayName,
-      avatar: m.avatar,
-      profileColor: m.profileColor,
-      total: r.cumulativePoints,
-    };
-  });
-
   return `<div class="stats-evolution">
     <div class="stats-chart-title">Évolution du classement</div>
-    <p class="stats-chart-hint">Pronos + Mon 11 · hors paris vainqueur. Classement après chaque journée, tous championnats confondus.</p>
+    <p class="stats-chart-hint">Touche une journée ou un joueur. Pronos + Mon 11, hors paris vainqueur.</p>
     ${pills}
     <div class="evo-toolbar">
       <div class="evo-toggle">
@@ -160,8 +147,6 @@ function evolutionCardHtml(history, comps, selectedCompId, mode, currentUserId) 
       </div>
     </div>
     <div class="evo-chart-host" data-evo-chart></div>
-    <p class="evo-last-label">Après ${escapeHtml(last.label)}</p>
-    ${rankingRowsHtml(rows, currentUserId, { compact: true, showExtras: false })}
   </div>`;
 }
 
@@ -261,7 +246,7 @@ async function renderStatsTab(body, state) {
 
   body.innerHTML = `
     <div class="section-card">${avgChartHtml(data.members)}</div>
-    <div class="section-card">${evolutionCardHtml(history, comps, state.evoCompId, state.evoMode, state.user.id)}</div>
+    <div class="section-card">${evolutionCardHtml(history, comps, state.evoCompId, state.evoMode)}</div>
     <div class="section-card">${lastMatchdayGridHtml(data.lastMatchdayByComp, data.members, state.user.id)}</div>
     <div class="section-card">${playerCardsHtml(data.members, state.user.id)}</div>
   `;
