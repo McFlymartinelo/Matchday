@@ -8,6 +8,7 @@ export function setTheme(theme) {
   const value = theme === 'dark' ? 'dark' : 'light';
   localStorage.setItem(STORAGE_KEY, value);
   applyTheme(value);
+  window.dispatchEvent(new CustomEvent('matchday:theme', { detail: value }));
 }
 
 export function applyTheme(theme = getTheme()) {

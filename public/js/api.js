@@ -133,6 +133,10 @@ export const standings = {
   },
   profile: (groupId) => api(`/groups/${groupId}/profile`),
   analytics: (groupId) => api(`/groups/${groupId}/analytics`),
+  history: (groupId, competitionId) => {
+    const q = competitionId ? `?competitionId=${competitionId}` : '';
+    return api(`/groups/${groupId}/standings/history${q}`);
+  },
   duel: (groupId, userIdA, userIdB) => api(`/groups/${groupId}/duel?a=${userIdA}&b=${userIdB}`),
 };
 

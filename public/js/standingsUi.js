@@ -1,5 +1,6 @@
 import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml } from './api.js';
 import { renderAvatarHtml, clubCrestLetters } from './avatars.js';
+import { mountRankingChart } from './rankingChart.js?v=62';
 
 function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, showExtras = true } = {}) {
   return rows.map((r, i) => {
@@ -107,10 +108,36 @@ function avgChartHtml(members) {
   </div>`;
 }
 
-function evolutionHtml(evolution, members, currentUserId) {
-  if (!evolution.length) return '<div class="empty-state">Pas encore de journée terminée</div>';
-  const last = evolution[evolution.length - 1];
-  const memberMap = new Map(members.map(m => [m.userId, m]));
+function evoCompPillsHtml(comps, selectedId) {
+  const allActive = selectedId == null;
+  const allStyle = allActive ? 'style="background:var(--pl);color:white;border-color:var(--pl)"' : '';
+  return `<div class="standings-comp-pills evo-comp-pills">
+    <button type="button" class="standings-comp-pill ${allActive ? 'active' : ''}" data-evo-comp="" ${allStyle}>Tous</button>
+    ${comps.map(c => {
+      const active = sameCompId(c.id, selectedId);
+      const cc = compColors(c.code);
+      const style = active ? `background:${cc.color};color:white;border-color:${cc.color}` : '';
+      return `<button type="button" class="standings-comp-pill ${active ? 'active' : ''}" data-evo-comp="${c.id}" style="${style}">
+        ${compLogoHtml(c, 'comp-pill-logo')} ${escapeHtml(c.code)}
+      </button>`;
+    }).join('')}
+  </div>`;
+}
+
+function evolutionCardHtml(history, comps, selectedCompId, mode, currentUserId) {
+  const rounds = history?.rounds ?? [];
+  const pills = comps.length > 1 ? evoCompPillsHtml(comps, selectedCompId) : '';
+  if (!rounds.length) {
+    return `<div class="stats-evolution">
+      <div class="stats-chart-title">Évolution du classement</div>
+      <p class="stats-chart-hint">Pronos + Mon 11 · hors paris vainqueur. Un point = une journée (tous championnats).</p>
+      ${pills}
+      <div class="empty-state">Pas encore de journée terminée</div>
+    </div>`;
+  }
+
+  const last = rounds[rounds.length - 1];
+  const memberMap = new Map((history.participants ?? []).map(p => [p.userId, p]));
   const rows = last.rankings.map(r => {
     const m = memberMap.get(r.userId) ?? {};
     return {
@@ -118,13 +145,23 @@ function evolutionHtml(evolution, members, currentUserId) {
       displayName: r.displayName,
       avatar: m.avatar,
       profileColor: m.profileColor,
-      total: r.total,
+      total: r.cumulativePoints,
     };
   });
+
   return `<div class="stats-evolution">
-    <div class="stats-chart-title">Classement cumulé après la dernière journée</div>
-    <p class="stats-chart-hint">Position générale après <strong>${last.label}</strong> (tous championnats).</p>
-    ${standingsBlockHtml(rows, currentUserId, compColors('PL'), { showExtras: false })}
+    <div class="stats-chart-title">Évolution du classement</div>
+    <p class="stats-chart-hint">Pronos + Mon 11 · hors paris vainqueur. Classement après chaque journée, tous championnats confondus.</p>
+    ${pills}
+    <div class="evo-toolbar">
+      <div class="evo-toggle">
+        <button type="button" class="tab ${mode === 'position' ? 'active' : ''}" data-evo-mode="position">Position</button>
+        <button type="button" class="tab ${mode === 'points' ? 'active' : ''}" data-evo-mode="points">Points</button>
+      </div>
+    </div>
+    <div class="evo-chart-host" data-evo-chart></div>
+    <p class="evo-last-label">Après ${escapeHtml(last.label)}</p>
+    ${rankingRowsHtml(rows, currentUserId, { compact: true, showExtras: false })}
   </div>`;
 }
 
@@ -213,6 +250,49 @@ function playerCardsHtml(members, currentUserId) {
   </div>`;
 }
 
+async function renderStatsTab(body, state) {
+  if (!state.evoMode) state.evoMode = 'position';
+
+  const [data, history] = await Promise.all([
+    standings.analytics(state.group.id),
+    standings.history(state.group.id, state.evoCompId),
+  ]);
+  const comps = state.competitions ?? [];
+
+  body.innerHTML = `
+    <div class="section-card">${avgChartHtml(data.members)}</div>
+    <div class="section-card">${evolutionCardHtml(history, comps, state.evoCompId, state.evoMode, state.user.id)}</div>
+    <div class="section-card">${lastMatchdayGridHtml(data.lastMatchdayByComp, data.members, state.user.id)}</div>
+    <div class="section-card">${playerCardsHtml(data.members, state.user.id)}</div>
+  `;
+
+  const host = body.querySelector('[data-evo-chart]');
+  if (host) {
+    mountRankingChart(host, history, { mode: state.evoMode, currentUserId: state.user.id });
+  }
+
+  body.querySelectorAll('[data-evo-comp]').forEach(btn => {
+    btn.onclick = () => {
+      const raw = btn.dataset.evoComp;
+      state.evoCompId = raw === '' ? null : compId(raw);
+      renderStatsTab(body, state);
+    };
+  });
+
+  body.querySelectorAll('[data-evo-mode]').forEach(btn => {
+    btn.onclick = () => {
+      if (btn.dataset.evoMode === state.evoMode) return;
+      state.evoMode = btn.dataset.evoMode;
+      body.querySelectorAll('[data-evo-mode]').forEach(b => {
+        b.classList.toggle('active', b.dataset.evoMode === state.evoMode);
+      });
+      if (host) {
+        mountRankingChart(host, history, { mode: state.evoMode, currentUserId: state.user.id });
+      }
+    };
+  });
+}
+
 async function renderByCompTab(body, state) {
   const comps = state.competitions;
   if (!comps.length) {
@@ -275,13 +355,7 @@ export async function renderStandingsScreen(el, state) {
     } else if (state.standingsTab === 'byComp') {
       await renderByCompTab(body, state);
     } else if (state.standingsTab === 'stats') {
-      const data = await standings.analytics(state.group.id);
-      body.innerHTML = `
-        <div class="section-card">${avgChartHtml(data.members)}</div>
-        <div class="section-card">${evolutionHtml(data.matchdayEvolution, data.members, state.user.id)}</div>
-        <div class="section-card">${lastMatchdayGridHtml(data.lastMatchdayByComp, data.members, state.user.id)}</div>
-        <div class="section-card">${playerCardsHtml(data.members, state.user.id)}</div>
-      `;
+      await renderStatsTab(body, state);
     } else if (state.standingsTab === 'duel') {
       await renderDuelTab(body, state);
     }

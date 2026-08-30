@@ -2011,6 +2011,35 @@ html[data-theme="dark"] .toast-default {
 
 /* Stats classement */
 .stats-chart-title { font-size: 12px; font-weight: 800; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
+.stats-chart-hint { font-size: 12px; color: var(--ink-soft); font-weight: 600; margin: -6px 0 12px; line-height: 1.4; }
+.evo-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.evo-toggle { display: flex; gap: 6px; }
+.evo-toggle .tab { flex: 0 0 auto; padding: 8px 14px; min-width: 88px; }
+.evo-chart-host { margin: 4px 0 10px; }
+.evo-chart-frame { position: relative; }
+.evo-svg { width: 100%; height: 220px; display: block; }
+.evo-hit { cursor: pointer; }
+.evo-tooltip {
+  position: absolute; transform: translate(-50%, calc(-100% - 10px));
+  background: var(--card); color: var(--ink); border: 1.5px solid var(--border-soft);
+  border-radius: 12px; padding: 8px 10px; min-width: 140px; pointer-events: none; z-index: 3;
+}
+.evo-tooltip[hidden] { display: none; }
+.evo-tip-label { font-size: 10px; font-weight: 800; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; }
+.evo-tip-name { font-size: 13px; font-weight: 800; margin-top: 2px; }
+.evo-tip-meta { font-size: 11px; font-weight: 700; color: var(--ink-soft); margin-top: 2px; }
+.evo-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.evo-legend-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--border-soft);
+  background: var(--card-soft); color: var(--ink); font-size: 11px; font-weight: 800;
+  cursor: pointer; font-family: inherit;
+}
+.evo-legend-item.off { opacity: .35; }
+.evo-legend-item.me { border-color: var(--pl); background: var(--pl-bg); }
+.evo-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.evo-last-label { font-size: 11px; font-weight: 700; color: var(--ink-soft); margin: 8px 0; }
+.evo-comp-pills { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 10px; -webkit-overflow-scrolling: touch; }
 .stats-bars { display: flex; align-items: flex-end; gap: 10px; min-height: 140px; padding-top: 8px; }
 .stats-bar-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .stats-bar-track { width: 100%; max-width: 48px; height: 100px; background: var(--card-soft); border-radius: 10px 10px 4px 4px; display: flex; align-items: flex-end; overflow: hidden; }

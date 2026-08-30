@@ -4,6 +4,7 @@ import { authRequired, groupMemberRequired } from '../middleware/auth.js';
 import { getCompetitionSeason } from '../lib/season.js';
 import { applyZonesToRows, defaultEuropeanZones } from '../lib/standingZones.js';
 import { withRanks } from '../lib/scoring.js';
+import { buildRankingHistory, accumulateHistory, buildPointsByRound } from '../lib/rankingHistory.js';
 
 const router = Router();
 
@@ -140,6 +141,16 @@ router.get('/:groupId/standings/matchday/:matchday', authRequired, groupMemberRe
     diffCount: Number(r.diff_count),
     winnerCount: Number(r.winner_count),
   }))));
+});
+
+router.get('/:groupId/standings/history', authRequired, groupMemberRequired, async (req, res) => {
+  const raw = req.query.competitionId ? Number(req.query.competitionId) : null;
+  const competitionId = Number.isFinite(raw) && raw > 0 ? raw : null;
+  try {
+    res.json(await buildRankingHistory(req.groupId, { competitionId }));
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erreur serveur' });
+  }
 });
 
 router.get('/:groupId/standings/official/:competitionId', authRequired, groupMemberRequired, async (req, res) => {
@@ -316,74 +327,36 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
     [req.groupId]
   );
 
-  const roundKey = (compId, md) => `${compId}:${md}`;
-  const predLookup = new Map();
-  const fullLookup = new Map();
-  for (const r of roundPoints) {
-    const k = roundKey(r.competition_id, r.matchday);
-    if (!predLookup.has(k)) predLookup.set(k, new Map());
-    if (!fullLookup.has(k)) fullLookup.set(k, new Map());
-    const pts = Number(r.points);
-    predLookup.get(k).set(r.user_id, {
-      points: pts,
-      exactCount: Number(r.exact_count),
-      diffCount: Number(r.diff_count),
-      winnerCount: Number(r.winner_count),
-    });
-    fullLookup.get(k).set(r.user_id, pts);
-  }
-  for (const r of xiRoundPoints) {
-    const k = roundKey(r.competition_id, r.matchday);
-    if (!fullLookup.has(k)) fullLookup.set(k, new Map());
-    const prev = fullLookup.get(k).get(r.user_id) ?? 0;
-    fullLookup.get(k).set(r.user_id, prev + Number(r.points));
-  }
-
-  const cumulative = new Map(members.map(m => [m.userId, {
-    total: 0, exactCount: 0, diffCount: 0, winnerCount: 0,
-  }]));
-  const matchdayEvolution = [];
-  const pointsByMatchday = [];
-
-  rounds.forEach((round, idx) => {
-    const k = roundKey(round.competition_id, round.matchday);
-    const byUserPred = predLookup.get(k) ?? new Map();
-    const byUserFull = fullLookup.get(k) ?? new Map();
-    const label = `${round.comp_code} · J${round.matchday}`;
-    const roundPts = {
-      round: idx + 1,
-      label,
-      compCode: round.comp_code,
-      compNom: round.comp_nom,
-      matchday: round.matchday,
-      points: {},
-    };
-
-    for (const m of members) {
-      const pred = byUserPred.get(m.userId);
-      roundPts.points[m.userId] = pred?.points ?? 0;
-      const cur = cumulative.get(m.userId);
-      cur.total += byUserFull.get(m.userId) ?? 0;
-      cur.exactCount += pred?.exactCount ?? 0;
-      cur.diffCount += pred?.diffCount ?? 0;
-      cur.winnerCount += pred?.winnerCount ?? 0;
-    }
-
-    const ranked = withRanks(members.map(m => {
-      const cur = cumulative.get(m.userId);
-      return {
-        userId: m.userId,
-        displayName: m.displayName,
-        total: cur.total,
-        exactCount: cur.exactCount,
-        diffCount: cur.diffCount,
-        winnerCount: cur.winnerCount,
-      };
-    }));
-
-    pointsByMatchday.push(roundPts);
-    matchdayEvolution.push({ round: idx + 1, label, rankings: ranked });
-  });
+  const pointsByRound = buildPointsByRound(roundPoints, xiRoundPoints);
+  const historyRounds = accumulateHistory(
+    members.map(m => ({
+      userId: Number(m.userId),
+      displayName: m.displayName,
+      avatar: m.avatar,
+      profileColor: m.profileColor,
+    })),
+    rounds.map(r => ({
+      competitionId: Number(r.competition_id),
+      matchday: Number(r.matchday),
+      compCode: r.comp_code,
+      compNom: r.comp_nom,
+    })),
+    pointsByRound,
+  );
+  const matchdayEvolution = historyRounds.map(r => ({
+    round: r.index,
+    label: r.label,
+    rankings: r.rankings.map(x => ({
+      userId: x.userId,
+      displayName: x.displayName,
+      total: x.cumulativePoints,
+      exactCount: x.exactCount,
+      diffCount: x.diffCount,
+      winnerCount: x.winnerCount,
+      rank: x.rank,
+      roundPoints: x.roundPoints,
+    })),
+  }));
 
   const groupComps = await all(
     `SELECT c.id, c.code, c.nom FROM competitions c
@@ -412,11 +385,11 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
         points: {},
       };
     }
-    const k = roundKey(round.competition_id, round.matchday);
-    const byUserPred = predLookup.get(k) ?? new Map();
+    const k = `${Number(round.competition_id)}:${Number(round.matchday)}`;
+    const byUser = pointsByRound.get(k) ?? new Map();
     const points = {};
     for (const m of members) {
-      points[m.userId] = byUserPred.get(m.userId)?.points ?? 0;
+      points[m.userId] = byUser.get(Number(m.userId))?.predPoints ?? 0;
     }
     return {
       competitionId: c.id,
