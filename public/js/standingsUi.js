@@ -1,6 +1,6 @@
-import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml } from './api.js';
+import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml } from './api.js?v=63';
 import { renderAvatarHtml, clubCrestLetters } from './avatars.js';
-import { mountRankingChart } from './rankingChart.js?v=62';
+import { mountRankingChart } from './rankingChart.js?v=63';
 
 function rankingRowsHtml(rows, currentUserId, { compact = false, startRank = 1, showExtras = true } = {}) {
   return rows.map((r, i) => {

@@ -1,4 +1,4 @@
-import { escapeHtml } from './api.js';
+import { escapeHtml } from './api.js?v=63';
 
 const PALETTE = ['#6B3FD6', '#2D8B57', '#E0532E', '#1C6FD0', '#C9701F', '#0D9488', '#DB2777', '#4F46E5'];
 
