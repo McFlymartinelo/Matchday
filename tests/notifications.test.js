@@ -7,6 +7,7 @@ import {
   findMorningReminderTargets,
   getParisCalendarDay,
   cleanupTestReminderMatch,
+  sendPredictionReminders,
 } from '../server/services/notifications.js';
 
 describe('notifications — rappel pronostic 1h', () => {
@@ -79,6 +80,42 @@ describe('notifications — rappel pronostic 1h', () => {
     });
 
     assert.equal(targets.length, 0);
+  });
+
+  it('ne marque pas le rappel comme envoyé si le push est ignoré (VAPID absent)', async () => {
+    const fixture = await get(
+      `SELECT u.id AS user_id, gm.group_id
+       FROM users u
+       JOIN group_members gm ON gm.user_id = u.id
+       LIMIT 1`
+    );
+    assert.ok(fixture, 'utilisateur avec groupe requis');
+
+    const seeded = await seedTestReminderMatch({
+      userId: fixture.user_id,
+      groupId: fixture.group_id,
+      minutes: 60,
+      bsdEventId: -888002,
+    });
+
+    delete process.env.VAPID_PUBLIC_KEY;
+    delete process.env.VAPID_PRIVATE_KEY;
+
+    const result = await sendPredictionReminders({
+      userId: fixture.user_id,
+      matchId: seeded.matchId,
+      minutes: 60,
+      windowMinutes: 10,
+    });
+
+    assert.ok(result.count >= 1);
+    assert.ok(result.results.every(row => row.push?.skipped === true));
+
+    const logged = await get(
+      `SELECT id FROM notification_log WHERE user_id = ? AND match_id = ? AND type = 'prono_reminder'`,
+      [fixture.user_id, seeded.matchId]
+    );
+    assert.equal(logged, null);
   });
 });
 

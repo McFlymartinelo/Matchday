@@ -11,7 +11,7 @@ export function securityHeaders(_req, res, next) {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src https://fonts.gstatic.com",
       "img-src 'self' data: https://sports.bzzoiro.com https://crests.football-data.org https://api.qrserver.com",
-      "connect-src 'self'",
+      "connect-src 'self' https://fcm.googleapis.com https://fcmregistrations.googleapis.com https://android.googleapis.com https://updates.push.services.mozilla.com https://web.push.apple.com https://*.push.apple.com",
       "manifest-src 'self'",
       "worker-src 'self'",
       "frame-ancestors 'none'",

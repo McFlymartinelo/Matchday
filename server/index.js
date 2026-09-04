@@ -28,7 +28,14 @@ function scheduleJobs() {
     console.warn('⚠️  Push notifications désactivées :', vapid.error);
   }
   cron.schedule('*/5 * * * *', () => {
-    sendPredictionReminders().catch(err => console.error('Rappels push:', err.message));
+    sendPredictionReminders()
+      .then(r => {
+        if (r.count > 0) {
+          const sent = r.results.reduce((n, row) => n + (row.push?.sent ?? 0), 0);
+          console.log(`Rappels push: ${r.count} cible(s), ${sent} envoyé(s)`);
+        }
+      })
+      .catch(err => console.error('Rappels push:', err.message));
   });
 
   const morningEnabled = process.env.NOTIFICATION_MORNING_ENABLED !== 'false';
@@ -36,7 +43,9 @@ function scheduleJobs() {
   const morningTz = process.env.NOTIFICATION_MORNING_TZ?.trim() || 'Europe/Paris';
   if (morningEnabled) {
     cron.schedule(`0 ${morningHour} * * *`, () => {
-      sendMorningReminders().catch(err => console.error('Rappels matin:', err.message));
+      sendMorningReminders()
+        .then(r => console.log(`Rappels matin: ${r.count} cible(s)`))
+        .catch(err => console.error('Rappels matin:', err.message));
     }, { timezone: morningTz });
   }
 }

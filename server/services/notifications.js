@@ -138,7 +138,7 @@ export async function sendPushToUser(userId, payload) {
     } catch (err) {
       failed++;
       errors.push({ endpoint: sub.endpoint.slice(0, 40), status: err.statusCode, message: err.message });
-      if (err.statusCode === 404 || err.statusCode === 410) {
+      if (err.statusCode === 404 || err.statusCode === 410 || err.statusCode === 403) {
         await run('DELETE FROM push_subscriptions WHERE endpoint = ?', [sub.endpoint]);
       }
     }
@@ -179,6 +179,13 @@ export function buildReminderPayload(target) {
   };
 }
 
+async function logReminder(userId, matchId, type) {
+  await run(
+    `INSERT OR IGNORE INTO notification_log (user_id, match_id, type) VALUES (?, ?, ?)`,
+    [userId, matchId, type]
+  );
+}
+
 export async function sendPredictionReminders(options = {}) {
   const targets = await findPendingReminderTargets(options);
   const results = [];
@@ -191,12 +198,20 @@ export async function sendPredictionReminders(options = {}) {
       continue;
     }
 
-    const push = await sendPushToUser(t.user_id, payload);
-    await run(
-      `INSERT INTO notification_log (user_id, match_id, type) VALUES (?, ?, 'prono_reminder')`,
-      [t.user_id, t.match_id]
-    );
-    results.push({ ...t, push, payload });
+    try {
+      const push = await sendPushToUser(t.user_id, payload);
+      if (push.sent > 0) {
+        await logReminder(t.user_id, t.match_id, 'prono_reminder');
+      } else if (push.skipped) {
+        console.warn(`Rappel 1h user=${t.user_id} match=${t.match_id}: ${push.reason}`);
+      } else if (push.failed > 0) {
+        console.warn(`Rappel 1h user=${t.user_id} match=${t.match_id}: ${push.failed} échec(s)`, push.errors);
+      }
+      results.push({ ...t, push, payload });
+    } catch (err) {
+      console.error(`Rappel 1h user=${t.user_id} match=${t.match_id}:`, err.message);
+      results.push({ ...t, payload, push: { sent: 0, failed: 1, skipped: false, errors: [{ message: err.message }] } });
+    }
   }
 
   return { count: targets.length, results };
@@ -306,16 +321,22 @@ export async function sendMorningReminders(options = {}) {
       continue;
     }
 
-    const push = await sendPushToUser(t.user_id, payload);
-    if (push.sent > 0) {
-      for (const matchId of t.match_ids) {
-        await run(
-          `INSERT INTO notification_log (user_id, match_id, type) VALUES (?, ?, 'prono_morning')`,
-          [t.user_id, matchId]
-        );
+    try {
+      const push = await sendPushToUser(t.user_id, payload);
+      if (push.sent > 0) {
+        for (const matchId of t.match_ids) {
+          await logReminder(t.user_id, matchId, 'prono_morning');
+        }
+      } else if (push.skipped) {
+        console.warn(`Rappel matin user=${t.user_id}: ${push.reason}`);
+      } else if (push.failed > 0) {
+        console.warn(`Rappel matin user=${t.user_id}: ${push.failed} échec(s)`, push.errors);
       }
+      results.push({ ...t, push, payload });
+    } catch (err) {
+      console.error(`Rappel matin user=${t.user_id}:`, err.message);
+      results.push({ ...t, payload, push: { sent: 0, failed: 1, skipped: false, errors: [{ message: err.message }] } });
     }
-    results.push({ ...t, push, payload });
   }
 
   return { count: targets.length, results };

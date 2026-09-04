@@ -1,6 +1,6 @@
 import { api, showToast } from './api.js';
 
-const SW_URL = '/sw.js?v=16';
+const SW_URL = '/sw.js?v=17';
 const PENDING_NAV_KEY = 'matchday_pending_nav';
 
 let navHandler = null;
@@ -91,6 +91,9 @@ function handleServiceWorkerMessage(event) {
   }
   if (type === 'MATCHDAY_PUSH') {
     pushHandler?.(payload);
+  }
+  if (type === 'MATCHDAY_PUSH_RESUBSCRIBE') {
+    syncPushIfEnabled().catch(() => {});
   }
 }
 
@@ -260,15 +263,48 @@ export async function disablePushNotifications() {
   showToast('Notifications désactivées');
 }
 
+function applicationServerKeyMatches(subscription, publicKey) {
+  const expected = urlBase64ToUint8Array(publicKey);
+  const actual = subscription.options?.applicationServerKey;
+  if (!actual) return false;
+  const bytes = new Uint8Array(actual);
+  if (bytes.length !== expected.length) return false;
+  return bytes.every((b, i) => b === expected[i]);
+}
+
 export async function syncPushIfEnabled() {
   if (!notificationsEnabled()) return;
-  if (Notification.permission !== 'granted') {
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
     localStorage.setItem('matchday_notifications', 'off');
     return;
+  }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  try {
+    const vapid = await api('/notifications/vapid-public-key');
+    if (!vapid.configured || !vapid.publicKey) return;
+
+    const reg = await getServiceWorkerRegistration();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub || !applicationServerKeyMatches(sub, vapid.publicKey)) {
+      if (sub) await sub.unsubscribe();
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapid.publicKey),
+      });
+    }
+
+    await api('/notifications/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ ...sub.toJSON(), quiet: true }),
+    });
+  } catch (err) {
+    console.warn('Sync push:', err.message);
   }
 }
 
 export async function sendTestPushFromApp() {
+  await syncPushIfEnabled();
   await showLocalTestNotification();
   try {
     const result = await api('/notifications/test', { method: 'POST' });

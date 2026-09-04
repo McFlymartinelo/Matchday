@@ -27,6 +27,9 @@ router.post('/subscribe', authRequired, async (req, res) => {
 
   try {
     await savePushSubscription(req.user.id, req.body);
+    if (req.body?.quiet === true) {
+      return res.json({ ok: true, quiet: true });
+    }
     const test = await sendTestPush(req.user.id);
     res.json({ ok: true, test });
   } catch (err) {

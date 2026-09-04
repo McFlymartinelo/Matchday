@@ -1,4 +1,4 @@
-const CACHE = 'matchday-v20';
+const CACHE = 'matchday-v21';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -96,6 +96,18 @@ self.addEventListener('push', (e) => {
         });
       }
     })()
+  );
+});
+
+self.addEventListener('pushsubscriptionchange', (e) => {
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const client of list) {
+        if (sameAppClient(client)) {
+          client.postMessage({ type: 'MATCHDAY_PUSH_RESUBSCRIBE' });
+        }
+      }
+    })
   );
 });
 
