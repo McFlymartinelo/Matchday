@@ -10,8 +10,12 @@ function generateInviteCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+const COMP_ORDER = `CASE c.code
+  WHEN 'L1' THEN 1 WHEN 'PL' THEN 2 WHEN 'PD' THEN 3
+  WHEN 'SA' THEN 4 WHEN 'BL1' THEN 5 WHEN 'LDC' THEN 6 ELSE 9 END`;
+
 router.get('/competitions', authRequired, async (_req, res) => {
-  const comps = await all('SELECT * FROM competitions ORDER BY id');
+  const comps = await all(`SELECT * FROM competitions c ORDER BY ${COMP_ORDER}, c.nom`);
   res.json(comps.map(c => ({
     id: c.id, code: c.code, nom: c.nom, pays: c.pays, emoji: c.emoji, logo: c.logo,
     couleur: c.couleur, couleurBg: c.couleur_bg, saisonActive: c.saison_active,
@@ -109,7 +113,8 @@ router.get('/:groupId', authRequired, groupMemberRequired, async (req, res) => {
   const competitions = await all(
     `SELECT c.* FROM competitions c
      JOIN group_competitions gc ON gc.competition_id = c.id
-     WHERE gc.group_id = ?`,
+     WHERE gc.group_id = ?
+     ORDER BY ${COMP_ORDER}, c.nom`,
     [req.groupId]
   );
   const members = await all(

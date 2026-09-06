@@ -15,6 +15,8 @@
   --serie-a-bg: #E3EFFC;
   --bundesliga: #C9701F;
   --bundesliga-bg: #FDF1E2;
+  --ldc: #001959;
+  --ldc-bg: #E8ECF6;
   --l1: var(--ligue1);
   --l1-bg: var(--ligue1-bg);
   --pl: var(--premier-league);
@@ -41,6 +43,7 @@ html[data-theme="dark"] {
   --liga-bg: #2a1814;
   --serie-bg: #121f33;
   --bundesliga-bg: #2a1e12;
+  --ldc-bg: #10182c;
   --chat-other-bg: #252d3d;
   --chat-input-bg: #0d121c;
   --shadow-soft: 0 10px 32px -8px rgba(0, 0, 0, 0.45);
@@ -1783,6 +1786,10 @@ html[data-theme="dark"] .pronos-progress-pct { color: #a88af0; }
   background: color-mix(in srgb, #0d9488 14%, var(--card));
   box-shadow: inset 3px 0 0 #0d9488;
 }
+.league-row.zone-po {
+  background: color-mix(in srgb, #c9a227 16%, var(--card));
+  box-shadow: inset 3px 0 0 #c9a227;
+}
 .league-row.zone-relq {
   background: color-mix(in srgb, #c9701f 12%, var(--card));
   box-shadow: inset 3px 0 0 #c9701f;
@@ -1794,6 +1801,7 @@ html[data-theme="dark"] .pronos-progress-pct { color: #a88af0; }
 .league-row.zone-cl .league-pos { background: #1c4ed8; color: #fff; }
 .league-row.zone-el .league-pos { background: #f68a33; color: #fff; }
 .league-row.zone-ecl .league-pos { background: #0d9488; color: #fff; }
+.league-row.zone-po .league-pos { background: #c9a227; color: #001959; }
 .league-row.zone-relq .league-pos { background: #c9701f; color: #fff; }
 .league-row.zone-rel .league-pos { background: var(--liga); color: #fff; }
 html[data-theme="dark"] .league-row.zone-cl {
@@ -1804,6 +1812,9 @@ html[data-theme="dark"] .league-row.zone-el {
 }
 html[data-theme="dark"] .league-row.zone-ecl {
   background: color-mix(in srgb, #0d9488 22%, var(--card));
+}
+html[data-theme="dark"] .league-row.zone-po {
+  background: color-mix(in srgb, #c9a227 22%, var(--card));
 }
 html[data-theme="dark"] .league-row.zone-relq {
   background: color-mix(in srgb, #c9701f 20%, var(--card));
@@ -1889,6 +1900,10 @@ html[data-theme="dark"] .league-row.relegation {
 .legend-dot.zone-ecl {
   background: color-mix(in srgb, #0d9488 18%, var(--card));
   border: 2px solid #0d9488;
+}
+.legend-dot.zone-po {
+  background: color-mix(in srgb, #c9a227 18%, var(--card));
+  border: 2px solid #c9a227;
 }
 .legend-dot.zone-relq {
   background: color-mix(in srgb, #c9701f 18%, var(--card));

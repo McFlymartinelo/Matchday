@@ -8,15 +8,34 @@ const ZONE_LEGEND = [
   { id: 'rel', label: 'Relégation' },
 ];
 
+const ZONE_LEGEND_LDC = [
+  { id: 'cl', label: '8es de finale' },
+  { id: 'po', label: 'Play-offs' },
+  { id: 'rel', label: 'Éliminé' },
+];
+
 function zoneBucket(zoneKey, zoneLabel = '') {
   const key = String(zoneKey ?? '').toLowerCase();
   const label = String(zoneLabel ?? '').toLowerCase();
+  if (key === 'po' || key === 'kpo') return 'po';
+  if (
+    (label.includes('play-off') || label.includes('playoff') || label.includes('play offs'))
+    && !label.includes('releg')
+  ) return 'po';
   if (key === 'cl' || key === 'clq' || key === 'ucl' || label.includes('champions')) return 'cl';
   if (key === 'el' || key === 'elq' || key === 'uel' || (label.includes('europa') && !label.includes('conference'))) return 'el';
   if (key === 'uecl' || key === 'ecl' || key === 'coe' || label.includes('conference') || label.includes('conférence')) return 'ecl';
   if (key === 'relq' || (label.includes('playoff') && label.includes('releg'))) return 'relq';
   if (key === 'rel' || label.includes('relegation') || label.includes('relégation')) return 'rel';
   return null;
+}
+
+function ldcZoneFromRow(row) {
+  const p = Number(row.position);
+  if (p >= 1 && p <= 8) return 'cl';
+  if (p >= 9 && p <= 24) return 'po';
+  if (p >= 25) return 'rel';
+  return zoneBucket(row.zone_key, row.zone_label);
 }
 
 function renderLeagueTable(comp, rows, logoMap) {
@@ -34,8 +53,10 @@ function renderLeagueTable(comp, rows, logoMap) {
     </div>`;
   }
 
-  const presentZones = new Set(rows.map(r => zoneBucket(r.zone_key, r.zone_label)).filter(Boolean));
-  const legend = ZONE_LEGEND.filter(z => presentZones.has(z.id));
+  const isLdc = String(comp.code ?? '').toUpperCase() === 'LDC';
+  const presentZones = new Set(rows.map(r => (isLdc ? ldcZoneFromRow(r) : zoneBucket(r.zone_key, r.zone_label))).filter(Boolean));
+  const legendSrc = isLdc ? ZONE_LEGEND_LDC : ZONE_LEGEND;
+  const legend = legendSrc.filter(z => presentZones.has(z.id));
 
   return `<div class="section-card league-table-card" style="--league-color:${comp.couleur ?? cc.color};--league-bg:${comp.couleurBg ?? cc.bg}">
     <div class="section-head">
@@ -53,9 +74,12 @@ function renderLeagueTable(comp, rows, logoMap) {
     ${rows.map(r => {
       const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0);
       const gdStr = gd > 0 ? `+${gd}` : String(gd);
-      const zone = zoneBucket(r.zone_key, r.zone_label);
+      const zone = isLdc ? ldcZoneFromRow(r) : zoneBucket(r.zone_key, r.zone_label);
       const teamId = r.team_id ?? logoMap.get(normTeamName(r.team_name));
-      const zoneTitle = r.zone_label ? ` title="${escapeHtml(r.zone_label)}"` : '';
+      const zoneLabel = isLdc
+        ? (ZONE_LEGEND_LDC.find(z => z.id === zone)?.label ?? '')
+        : (r.zone_label ?? '');
+      const zoneTitle = zoneLabel ? ` title="${escapeHtml(zoneLabel)}"` : '';
       return `<div class="league-row${zone ? ` zone-${zone}` : ''}"${zoneTitle}>
         <span class="league-pos">${r.position}</span>
         <span class="league-team">

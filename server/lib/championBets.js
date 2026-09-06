@@ -1,6 +1,7 @@
-import { all, run } from '../db/connection.js';
+import { all, get, run } from '../db/connection.js';
 import { scoreSpecialBet } from './scoring.js';
 import { isCompetitionSeasonFinished } from './season.js';
+import { isCupCompetition } from './competitions.js';
 
 function normName(name) {
   return String(name ?? '')
@@ -12,7 +13,36 @@ function normName(name) {
     .trim();
 }
 
-/** Met à jour les points des paris « champion » quand la saison est terminée (1er du classement). */
+/** Vainqueur officiel : 1er du classement, ou vainqueur de la finale pour une coupe. */
+export async function resolveCompetitionWinner(competitionId, season) {
+  const comp = await get('SELECT code FROM competitions WHERE id = ?', [competitionId]);
+  if (isCupCompetition(comp?.code)) {
+    const final = await get(
+      `SELECT home_team_name, away_team_name, home_score, away_score
+       FROM matches
+       WHERE competition_id = ? AND season = ?
+         AND status IN ('finished', 'FT', 'ended')
+         AND home_score IS NOT NULL AND away_score IS NOT NULL
+       ORDER BY datetime(kickoff_at) DESC, id DESC
+       LIMIT 1`,
+      [competitionId, season]
+    );
+    if (!final) return null;
+    const hs = Number(final.home_score);
+    const as = Number(final.away_score);
+    if (hs === as) return null;
+    return hs > as ? final.home_team_name : final.away_team_name;
+  }
+
+  const leader = await get(
+    `SELECT team_name FROM official_standings
+     WHERE competition_id = ? AND season = ? ORDER BY position ASC LIMIT 1`,
+    [competitionId, season]
+  );
+  return leader?.team_name ?? null;
+}
+
+/** Met à jour les points des paris « champion » quand la saison est terminée. */
 export async function scoreChampionBetsForCompetition(competitionId, season = '2025-2026') {
   if (!await isCompetitionSeasonFinished(competitionId, season)) {
     const bets = await all(
@@ -26,14 +56,8 @@ export async function scoreChampionBetsForCompetition(competitionId, season = '2
     return bets.length;
   }
 
-  const leader = await all(
-    `SELECT team_name FROM official_standings
-     WHERE competition_id = ? AND season = ? ORDER BY position ASC LIMIT 1`,
-    [competitionId, season]
-  );
-  if (!leader.length) return 0;
-
-  const winner = leader[0].team_name;
+  const winner = await resolveCompetitionWinner(competitionId, season);
+  if (!winner) return 0;
   const bets = await all(
     `SELECT id, bet_value FROM special_bets
      WHERE competition_id = ? AND season = ? AND bet_type = 'champion'`,

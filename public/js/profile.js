@@ -275,9 +275,9 @@ export async function renderProfile(el, state, renderApp) {
 
     <div class="section-card">
 
-      <div class="section-head"><div class="jn">Vainqueur du championnat</div></div>
+      <div class="section-head"><div class="jn">Vainqueur de saison</div></div>
 
-      <p class="profile-desc" id="champion-bets-desc">Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison.</p>
+      <p class="profile-desc" id="champion-bets-desc">Choisis le futur champion (et le vainqueur de LDC). Bon vainqueur = <strong>+5 pts</strong> en fin de saison.</p>
 
       <div id="champion-bets" class="champion-bets"></div>
 
@@ -693,139 +693,100 @@ export async function renderProfile(el, state, renderApp) {
 
 
 const CHAMPION_BETS_DEADLINE = new Date('2026-09-04T00:00:00');
+const LDC_CHAMPION_BETS_DEADLINE = new Date('2026-09-08T18:00:00');
+
+function isCompChampionBetLocked(comp) {
+  const deadline = String(comp?.code ?? '').toUpperCase() === 'LDC'
+    ? LDC_CHAMPION_BETS_DEADLINE
+    : CHAMPION_BETS_DEADLINE;
+  return new Date() >= deadline;
+}
+
+function championBetLabel(comp) {
+  return String(comp?.code ?? '').toUpperCase() === 'LDC'
+    ? 'Vainqueur de la Ligue des champions'
+    : comp.nom;
+}
 
 async function mountChampionBets(state, bets) {
-
   const container = document.getElementById('champion-bets');
-
   if (!container) return;
 
-  const locked = new Date() >= CHAMPION_BETS_DEADLINE;
-
-  const desc = document.getElementById('champion-bets-desc');
-
-  if (desc) {
-
-    if (locked) {
-
-      desc.innerHTML = '<span class="champion-bet-lock-badge">🔒 Pronos verrouillés depuis le 4 septembre</span> — Bon vainqueur = <strong>+5 pts</strong> en fin de saison.';
-
-    } else {
-
-      desc.innerHTML = `Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison. <span class="champion-bet-deadline">Verrouillage le 4 septembre.</span>`;
-
-    }
-
-  }
-
   const comps = state.competitions ?? [];
+  const anyOpen = comps.some(c => !isCompChampionBetLocked(c));
+  const ldcOpen = comps.some(c => c.code === 'LDC' && !isCompChampionBetLocked(c));
+  const desc = document.getElementById('champion-bets-desc');
+  if (desc) {
+    if (!anyOpen) {
+      desc.innerHTML = '<span class="champion-bet-lock-badge">🔒 Pronos verrouillés</span> — Bon vainqueur = <strong>+5 pts</strong> en fin de saison.';
+    } else if (ldcOpen) {
+      desc.innerHTML = `Choisis le futur champion et le <strong>vainqueur de LDC</strong>. Bon vainqueur = <strong>+5 pts</strong>. <span class="champion-bet-deadline">LDC ouverte jusqu’au 8 septembre.</span>`;
+    } else {
+      desc.innerHTML = `Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison.`;
+    }
+  }
 
   if (!comps.length) {
-
     container.innerHTML = '<div class="empty-state">Aucun championnat suivi</div>';
-
     return;
-
   }
 
-
-
   container.innerHTML = comps.map(c => {
-
     const bet = bets.find(b =>
       b.betType === 'champion'
       && b.competitionId === c.id
       && (b.season == null || b.season === (c.saisonActive ?? c.saison_active))
     );
-
     const pts = bet?.points ? `<span class="champion-bet-pts">+${bet.points} pts</span>` : '';
-
+    const locked = isCompChampionBetLocked(c);
+    const lockHint = locked ? ' <span class="champion-bet-lock-badge">🔒</span>' : '';
     return `<div class="champion-bet-row" data-comp="${c.id}">
-
-      <div class="champion-bet-label">${compLogoHtml(c, 'comp-head-logo')} ${c.nom} ${pts}</div>
-
+      <div class="champion-bet-label">${compLogoHtml(c, 'comp-head-logo')} ${escapeHtml(championBetLabel(c))} ${pts}${lockHint}</div>
       <select class="champion-bet-select" data-comp="${c.id}"${locked ? ' disabled' : ''}>
-
         <option value="">— Choisir une équipe —</option>
-
       </select>
-
     </div>`;
-
   }).join('');
 
-
-
   for (const c of comps) {
-
     const select = container.querySelector(`select[data-comp="${c.id}"]`);
-
     const bet = bets.find(b =>
       b.betType === 'champion'
       && b.competitionId === c.id
       && (b.season == null || b.season === (c.saisonActive ?? c.saison_active))
     );
+    const locked = isCompChampionBetLocked(c);
 
     try {
-
       const teams = await specialBets.teams(state.group.id, c.id);
-
       for (const team of teams) {
-
         const opt = document.createElement('option');
-
         opt.value = team;
-
         opt.textContent = team;
-
         if (bet?.betValue === team) opt.selected = true;
-
         select.appendChild(opt);
-
       }
-
     } catch {
-
       select.innerHTML = '<option value="">Équipes indisponibles</option>';
-
     }
 
     if (!locked) {
-
       select.onchange = async () => {
-
         if (!select.value) return;
-
         try {
-
           const res = await specialBets.save(state.group.id, {
-
             competitionId: c.id,
-
             betType: 'champion',
-
             betValue: select.value,
-
           });
-
           const pts = res.bet?.points ? ` (+${res.bet.points} pts)` : '';
-
           showToast(`Vainqueur ${c.nom} enregistré${pts}`);
-
           renderApp();
-
         } catch (err) {
-
           showToast(err.message || 'Erreur');
-
         }
-
       };
-
     }
-
   }
-
 }
-
 

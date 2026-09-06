@@ -14,9 +14,9 @@ Application web de pronostics entre amis pour les grands championnats européens
 
 ## Fonctionnalités
 
-- Groupes privés avec sélection des championnats (Ligue 1, PL, Liga, Serie A, Bundesliga)
+- Groupes privés avec sélection des championnats (Ligue 1, Ligue des champions, PL, Liga, Serie A, Bundesliga)
 - Pronostics avec barème configurable (3/2/1 pts)
-- Paris vainqueur de saison par championnat
+- Paris vainqueur de saison par championnat (et vainqueur de Ligue des champions)
 - Mon 11 de saison avec équipe type calculée via BSD
 - Classement général, chat de groupe, stats, duel entre joueurs
 - Sync automatique BSD (fixtures, scores, classements)

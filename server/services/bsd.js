@@ -29,6 +29,29 @@ export async function getLeagues(params = {}) {
   return bsdFetch('/api/v2/leagues/', params);
 }
 
+/** Pagination des ligues BSD (la LDC n’est pas toujours dans les 200 premières). */
+export async function getAllLeagues() {
+  const leagues = [];
+  const seen = new Set();
+  const pageSize = 200;
+  for (let offset = 0; offset < 2000; offset += pageSize) {
+    const data = await getLeagues({ limit: pageSize, offset });
+    const batch = extractResults(data);
+    const fresh = [];
+    for (const league of batch) {
+      const id = league?.id;
+      if (id != null) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      fresh.push(league);
+    }
+    leagues.push(...fresh);
+    if (batch.length < pageSize || !fresh.length) break;
+  }
+  return leagues;
+}
+
 export async function getLeague(leagueId) {
   return bsdFetch(`/api/v2/leagues/${leagueId}/`);
 }
@@ -354,6 +377,7 @@ export function normalizeEvent(event, competitionId) {
     away_score: event.away_score ?? null,
     status: mapStatus(event.status),
     matchday: event.round_number ?? event.matchday ?? null,
+    round_name: event.round_name ?? (typeof event.round === 'string' ? event.round : null) ?? event.stage_name ?? null,
     kickoff_at: event.event_date ?? event.date ?? event.kickoff,
   };
 }

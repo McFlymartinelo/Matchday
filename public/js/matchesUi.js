@@ -16,6 +16,15 @@ export function resetMatchesUi() {
   stopMatchLockRefresh();
 }
 
+function matchdayHeading(compCode, md, sectionMatches) {
+  const names = [...new Set(sectionMatches.map(m => m.round_name).filter(Boolean))];
+  if (names.length === 1) return names[0];
+  const code = String(compCode ?? '').toUpperCase();
+  const n = Number(md);
+  if (code === 'LDC' && Number.isFinite(n) && n > 8) return 'Phase à élimination';
+  return `Journée ${md}`;
+}
+
 function pickDisplayDuplicate(a, b) {
   if (a.prediction && !b.prediction) return a;
   if (b.prediction && !a.prediction) return b;
@@ -276,7 +285,7 @@ export async function renderMatches(el, state, hooks = {}) {
 
       return `<div class="section-card matchday-section ${allLocked ? 'matchday-past' : 'matchday-open'}" data-matchday="${md}" data-season="${escapeHtml(mdSeason)}">
         <div class="section-head">
-          <div class="jn"><div class="comp-flag" style="background:${cc.bg};color:${cc.color}">${escapeHtml(sectionComp.code ?? sectionComp.comp_code)}</div>Journée ${escapeHtml(md)}<span class="season-tag">${escapeHtml(mdSeason)}</span></div>
+          <div class="jn"><div class="comp-flag" style="background:${cc.bg};color:${cc.color}">${escapeHtml(sectionComp.code ?? sectionComp.comp_code)}</div>${escapeHtml(matchdayHeading(sectionComp.code ?? sectionComp.comp_code, md, ms))}<span class="season-tag">${escapeHtml(mdSeason)}</span></div>
           ${sectionBadge || (cd ? `<div class="countdown-bubble">${cd}</div>` : allLocked ? `<div class="countdown-bubble locked">${calendarClosed ? 'Fermée' : 'Terminée'}</div>` : '')}
         </div>
         ${ms.map(m => matchCardHtml(m, cc, logoMap)).join('')}

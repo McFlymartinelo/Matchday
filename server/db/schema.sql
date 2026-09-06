@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS matches (
   away_score INTEGER,
   status TEXT DEFAULT 'scheduled',
   matchday INTEGER,
+  round_name TEXT,
   kickoff_at TEXT NOT NULL,
   season TEXT DEFAULT '2025-2026',
   home_bsd_team_id INTEGER,

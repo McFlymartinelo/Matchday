@@ -189,6 +189,7 @@ export function showToast(msg, type = 'default') {
 export function compColors(code) {
   const map = {
     L1: { color: 'var(--l1)', bg: 'var(--l1-bg)', cls: 'l1' },
+    LDC: { color: 'var(--ldc)', bg: 'var(--ldc-bg)', cls: 'ldc' },
     PL: { color: 'var(--pl)', bg: 'var(--pl-bg)', cls: 'pl' },
     PD: { color: 'var(--liga)', bg: 'var(--liga-bg)', cls: 'liga' },
     SA: { color: 'var(--serie)', bg: 'var(--serie-bg)', cls: 'serie' },

@@ -1,4 +1,4 @@
-import { run, get } from './connection.js';
+import { run, get, all } from './connection.js';
 
 const COMPETITIONS = [
   { code: 'L1', bsd_league_id: null, nom: 'Ligue 1', pays: 'France', emoji: '🇫🇷', logo: 'https://crests.football-data.org/FL1.png', couleur: '#2D8B57', couleur_bg: '#E2F5EA' },
@@ -6,6 +6,7 @@ const COMPETITIONS = [
   { code: 'PD', bsd_league_id: null, nom: 'Liga', pays: 'Espagne', emoji: '🇪🇸', logo: 'https://crests.football-data.org/PD.png', couleur: '#E0532E', couleur_bg: '#FCE7E1' },
   { code: 'SA', bsd_league_id: null, nom: 'Serie A', pays: 'Italie', emoji: '🇮🇹', logo: 'https://crests.football-data.org/SA.png', couleur: '#1C6FD0', couleur_bg: '#E3EFFC' },
   { code: 'BL1', bsd_league_id: null, nom: 'Bundesliga', pays: 'Allemagne', emoji: '🇩🇪', logo: 'https://crests.football-data.org/BL1.png', couleur: '#C9701F', couleur_bg: '#FDF1E2' },
+  { code: 'LDC', bsd_league_id: null, nom: 'Ligue des champions', pays: 'Europe', emoji: '⭐', logo: 'https://crests.football-data.org/CL.png', couleur: '#001959', couleur_bg: '#E8ECF6' },
 ];
 
 /** Matchs de démo si BSD indisponible — pronostics ouverts */
@@ -17,6 +18,8 @@ const DEMO_MATCHES = [
   { id: -9005, comp: 'PD', home: 'Atlético Madrid', away: 'Séville', matchday: 28, daysAhead: 4 },
   { id: -9006, comp: 'PL', home: 'Arsenal', away: 'Liverpool', matchday: 30, daysAhead: 5 },
   { id: -9007, comp: 'PL', home: 'Manchester City', away: 'Chelsea', matchday: 30, daysAhead: 5 },
+  { id: -9008, comp: 'LDC', home: 'Real Madrid', away: 'Manchester City', matchday: 1, daysAhead: 6 },
+  { id: -9009, comp: 'LDC', home: 'Bayern Munich', away: 'Paris SG', matchday: 1, daysAhead: 6 },
 ];
 
 export async function seedCompetitions() {
@@ -30,10 +33,23 @@ export async function seedCompetitions() {
       );
     } else {
       await run(
-        'UPDATE competitions SET logo = ?, emoji = ?, nom = ?, couleur = ?, couleur_bg = ? WHERE code = ?',
-        [c.logo, c.emoji, c.nom, c.couleur, c.couleur_bg, c.code]
+        'UPDATE competitions SET logo = ?, emoji = ?, nom = ?, pays = ?, couleur = ?, couleur_bg = ? WHERE code = ?',
+        [c.logo, c.emoji, c.nom, c.pays, c.couleur, c.couleur_bg, c.code]
       );
     }
+  }
+  await attachCompetitionToAllGroups('LDC');
+}
+
+async function attachCompetitionToAllGroups(code) {
+  const comp = await get('SELECT id FROM competitions WHERE code = ?', [code]);
+  if (!comp) return;
+  const groups = await all('SELECT id FROM groups');
+  for (const g of groups) {
+    await run(
+      'INSERT OR IGNORE INTO group_competitions (group_id, competition_id) VALUES (?, ?)',
+      [g.id, comp.id]
+    );
   }
 }
 

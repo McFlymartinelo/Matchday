@@ -3,6 +3,11 @@
 export function zoneBucket(zoneKey, zoneLabel = '') {
   const key = String(zoneKey ?? '').toLowerCase();
   const label = String(zoneLabel ?? '').toLowerCase();
+  if (key === 'po' || key === 'kpo') return 'po';
+  if (
+    (label.includes('play-off') || label.includes('playoff') || label.includes('play offs'))
+    && !label.includes('releg')
+  ) return 'po';
   if (key === 'cl' || key === 'clq' || key === 'ucl' || label.includes('champions')) return 'cl';
   if (key === 'el' || key === 'elq' || key === 'uel' || (label.includes('europa') && !label.includes('conference'))) return 'el';
   if (key === 'uecl' || key === 'ecl' || key === 'coe' || label.includes('conference') || label.includes('conférence')) return 'ecl';
@@ -22,12 +27,12 @@ export function extractZonesLegend(zones) {
   return [];
 }
 
-export function applyZonesToRows(rows, zonesLegend) {
+export function applyZonesToRows(rows, zonesLegend, { overwrite = false } = {}) {
   const legend = extractZonesLegend(zonesLegend);
   return rows.map(row => {
-    let zoneKey = row.zone_key ?? row.zone?.key ?? null;
-    let zoneLabel = row.zone_label ?? row.zone?.label ?? null;
-    let zoneType = row.zone_type ?? row.zone?.type ?? null;
+    let zoneKey = overwrite ? null : (row.zone_key ?? row.zone?.key ?? null);
+    let zoneLabel = overwrite ? null : (row.zone_label ?? row.zone?.label ?? null);
+    let zoneType = overwrite ? null : (row.zone_type ?? row.zone?.type ?? null);
     if (!zoneKey && legend.length && row.position) {
       const z = legend.find(item => row.position >= item.from && row.position <= item.to);
       if (z) {
@@ -49,6 +54,14 @@ export function applyZonesToRows(rows, zonesLegend) {
 export function defaultEuropeanZones(compCode, tableSize) {
   const n = Number(tableSize) || 20;
   const code = String(compCode ?? '').toUpperCase();
+
+  if (code === 'LDC') {
+    return [
+      { key: 'cl', label: '8es de finale', type: 'qualification', from: 1, to: 8 },
+      { key: 'po', label: 'Play-offs', type: 'qualification', from: 9, to: 24 },
+      { key: 'rel', label: 'Éliminé', type: 'relegation', from: 25, to: n },
+    ];
+  }
 
   if (code === 'L1') {
     return [

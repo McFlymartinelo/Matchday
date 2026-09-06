@@ -4,6 +4,7 @@ import { computeMatchdayXi, computeSeasonXiBonus, scorePrediction } from '../lib
 import { dedupeBsdEvents, dedupeCompetitionMatches } from '../lib/matches.js';
 import { applyVenueOverride, invertPersistedVenueOverrides } from '../lib/matchOverrides.js';
 import { applyZonesToRows, defaultEuropeanZones, extractZonesLegend } from '../lib/standingZones.js';
+import { BSD_LEAGUE_MAPPING, isChampionsLeagueMainEvent, isCupCompetition, isLeaguePhaseMatch, pickBsdLeague } from '../lib/competitions.js';
 
 function normalizeWithOverrides(event, competitionId) {
   return applyVenueOverride(bsd.normalizeEvent(event, competitionId));
@@ -12,26 +13,9 @@ function normalizeWithOverrides(event, competitionId) {
 /** Mappe les IDs BSD réels depuis l'API (remplace les anciens IDs API-Football). */
 export async function syncLeagueIds() {
   try {
-    // BSD refuse les params inconnus (400). Pas de `is_active` — les ligues inactives sont masquées par défaut.
-    const data = await bsd.getLeagues({ limit: 200 });
-    const leagues = bsd.extractResults(data);
-    const mapping = {
-      L1: { names: ['ligue 1'], country: 'france' },
-      PL: { names: ['premier league'], country: 'england' },
-      PD: { names: ['laliga', 'la liga', 'primera'], country: 'spain' },
-      SA: { names: ['serie a'], country: 'italy' },
-      BL1: { names: ['bundesliga'], country: 'germany' },
-    };
-
-    for (const [code, rule] of Object.entries(mapping)) {
-      const found = leagues.find(l => {
-        if (l.is_women) return false;
-        const name = (l.name ?? '').toLowerCase();
-        const compact = name.replace(/[\s-]/g, '');
-        const country = (l.country ?? '').toLowerCase();
-        const nameMatch = rule.names.some(n => name.includes(n) || compact.includes(n.replace(/[\s-]/g, '')));
-        return nameMatch && country.includes(rule.country);
-      });
+    const leagues = await bsd.getAllLeagues();
+    for (const [code, rule] of Object.entries(BSD_LEAGUE_MAPPING)) {
+      const found = pickBsdLeague(leagues, rule);
       if (found) {
         await run('UPDATE competitions SET bsd_league_id = ? WHERE code = ?', [found.id, code]);
       }
@@ -45,6 +29,8 @@ export async function syncLeagueIds() {
 
 export async function syncFixtures(competitionId, bsdLeagueId) {
   try {
+    const comp = await get('SELECT code FROM competitions WHERE id = ?', [competitionId]);
+    const compCode = comp?.code;
     let events = [];
     let seasonLabel = '2025-2026';
     const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
@@ -77,22 +63,23 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
 
     let count = 0;
     const toImport = events.filter(e => !bsd.isReplacedEvent(e));
-    const normalized = dedupeBsdEvents(toImport, competitionId, normalizeWithOverrides);
+    const normalized = dedupeBsdEvents(toImport, competitionId, normalizeWithOverrides)
+      .filter(norm => isChampionsLeagueMainEvent(compCode, norm.round_name, norm.kickoff_at, seasonLabel));
     for (const norm of normalized) {
       const matchSeason = bsd.seasonLabelFromKickoff(norm.kickoff_at);
       await run(
         `INSERT INTO matches (bsd_event_id, competition_id, home_team_name, away_team_name,
-          home_bsd_team_id, away_bsd_team_id, home_score, away_score, status, matchday, kickoff_at, season, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          home_bsd_team_id, away_bsd_team_id, home_score, away_score, status, matchday, round_name, kickoff_at, season, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(bsd_event_id) DO UPDATE SET
            home_team_name = excluded.home_team_name, away_team_name = excluded.away_team_name,
            home_bsd_team_id = excluded.home_bsd_team_id, away_bsd_team_id = excluded.away_bsd_team_id,
            home_score = excluded.home_score, away_score = excluded.away_score,
-           status = excluded.status, matchday = excluded.matchday,
+           status = excluded.status, matchday = excluded.matchday, round_name = excluded.round_name,
            kickoff_at = excluded.kickoff_at, season = excluded.season, updated_at = datetime('now')`,
         [norm.bsd_event_id, norm.competition_id, norm.home_team_name, norm.away_team_name,
          norm.home_bsd_team_id, norm.away_bsd_team_id,
-         norm.home_score, norm.away_score, norm.status, norm.matchday, norm.kickoff_at, matchSeason]
+         norm.home_score, norm.away_score, norm.status, norm.matchday, norm.round_name, norm.kickoff_at, matchSeason]
       );
       count++;
     }
@@ -112,6 +99,25 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
          AND NOT EXISTS (SELECT 1 FROM predictions p WHERE p.match_id = matches.id)`,
         [competitionId, seasonLabel]
       );
+      if (isCupCompetition(compCode)) {
+        await run(
+          `DELETE FROM matches
+           WHERE competition_id = ? AND season = ?
+             AND lower(COALESCE(round_name, '')) LIKE '%qualif%'
+             AND NOT EXISTS (SELECT 1 FROM predictions p WHERE p.match_id = matches.id)`,
+          [competitionId, seasonLabel]
+        );
+        const startYear = String(seasonLabel).slice(0, 4);
+        if (/^\d{4}$/.test(startYear)) {
+          await run(
+            `DELETE FROM matches
+             WHERE competition_id = ? AND season = ?
+               AND datetime(kickoff_at) < datetime(?)
+               AND NOT EXISTS (SELECT 1 FROM predictions p WHERE p.match_id = matches.id)`,
+            [competitionId, seasonLabel, `${startYear}-09-01`]
+          );
+        }
+      }
     }
 
     await run('UPDATE competitions SET saison_active = ? WHERE id = ?', [seasonLabel, competitionId]);
@@ -221,15 +227,20 @@ async function resolveBsdSeasonId(bsdLeagueId, seasonLabel) {
 }
 
 async function computeStandingsFromMatches(competitionId, seasonLabel) {
+  const comp = await get('SELECT code FROM competitions WHERE id = ?', [competitionId]);
   const matches = await all(
-    `SELECT home_team_name, away_team_name, home_score, away_score, home_bsd_team_id, away_bsd_team_id
+    `SELECT home_team_name, away_team_name, home_score, away_score, home_bsd_team_id, away_bsd_team_id,
+            matchday, kickoff_at
      FROM matches
      WHERE competition_id = ? AND season = ?
        AND status IN ('finished', 'FT', 'ended')
        AND home_score IS NOT NULL AND away_score IS NOT NULL`,
     [competitionId, seasonLabel]
   );
-  if (!matches.length) return [];
+  const phaseMatches = matches.filter(m =>
+    isLeaguePhaseMatch(comp?.code, m.matchday, m.kickoff_at, seasonLabel)
+  );
+  if (!phaseMatches.length) return [];
 
   const table = new Map();
   const ensure = (name, id) => {
@@ -246,7 +257,7 @@ async function computeStandingsFromMatches(competitionId, seasonLabel) {
     return row;
   };
 
-  for (const m of matches) {
+  for (const m of phaseMatches) {
     const home = ensure(m.home_team_name, m.home_bsd_team_id);
     const away = ensure(m.away_team_name, m.away_bsd_team_id);
     const hs = Number(m.home_score);
@@ -343,8 +354,10 @@ export async function syncStandings(competitionId, bsdLeagueId) {
       return 0;
     }
 
-    const zones = bsdZones.length ? bsdZones : defaultEuropeanZones(comp?.code, rows.length);
-    rows = applyZonesToRows(rows, zones);
+    const zones = isCupCompetition(comp?.code) || !bsdZones.length
+      ? defaultEuropeanZones(comp?.code, rows.length)
+      : bsdZones;
+    rows = applyZonesToRows(rows, zones, { overwrite: isCupCompetition(comp?.code) });
 
     await run('DELETE FROM official_standings WHERE competition_id = ? AND season = ?', [competitionId, seasonLabel]);
 

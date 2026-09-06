@@ -2,6 +2,7 @@ import { run } from './connection.js';
 
 const LOGOS = {
   L1: 'https://crests.football-data.org/FL1.png',
+  LDC: 'https://crests.football-data.org/CL.png',
   PL: 'https://crests.football-data.org/PL.png',
   PD: 'https://crests.football-data.org/PD.png',
   SA: 'https://crests.football-data.org/SA.png',
