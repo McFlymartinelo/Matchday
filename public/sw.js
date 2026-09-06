@@ -1,4 +1,4 @@
-const CACHE = 'matchday-v21';
+const CACHE = 'matchday-v22';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -71,8 +71,6 @@ async function showMatchdayNotification(data) {
   await self.registration.showNotification(data.title, {
     body: data.body,
     tag: data.tag ?? `matchday-${Date.now()}`,
-    renotify: true,
-    requireInteraction: true,
     data: {
       url: path,
       matchId: data.matchId ?? null,
@@ -86,15 +84,15 @@ self.addEventListener('push', (e) => {
   const data = parsePushPayload(e);
   e.waitUntil(
     (async () => {
-      await notifyClients(data);
       try {
         await showMatchdayNotification(data);
       } catch {
-        await self.registration.showNotification('Matchday', {
+        await self.registration.showNotification(data.title || 'Matchday', {
           body: data.body,
           data: { url: data.url ?? '/?screen=matches' },
         });
       }
+      await notifyClients(data);
     })()
   );
 });

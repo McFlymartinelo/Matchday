@@ -72,6 +72,10 @@ export function createApp() {
     }
   });
 
+  app.get('/manifest.json', (_req, res) => {
+    res.type('application/manifest+json');
+    res.sendFile(join(__dirname, '../public/manifest.json'));
+  });
   app.use(express.static(join(__dirname, '../public')));
   app.get('*', (_req, res) => {
     res.sendFile(join(__dirname, '../public/index.html'));

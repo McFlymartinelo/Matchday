@@ -1,7 +1,10 @@
 import { api, showToast } from './api.js';
 
-const SW_URL = '/sw.js?v=17';
+const SW_URL = '/sw.js?v=18';
 const PENDING_NAV_KEY = 'matchday_pending_nav';
+const SW_REGISTER_OPTS = { scope: '/', updateViaCache: 'none' };
+
+let cachedVapid = null;
 
 let navHandler = null;
 let pushHandler = null;
@@ -99,7 +102,8 @@ function handleServiceWorkerMessage(event) {
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
-  navigator.serviceWorker.register(SW_URL).catch(() => {});
+  navigator.serviceWorker.register(SW_URL, SW_REGISTER_OPTS).catch(() => {});
+  getVapidPublicKeyCached().catch(() => {});
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -113,68 +117,90 @@ export function notificationsEnabled() {
   return localStorage.getItem('matchday_notifications') === 'on';
 }
 
+export function isIosDevice() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+export function isStandaloneDisplay() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+}
+
+/** iOS n’expose Push/Notification que dans la PWA écran d’accueil. */
+export function detectPushContext() {
+  const standalone = isStandaloneDisplay();
+  const hasPush = 'serviceWorker' in navigator && 'PushManager' in window;
+  const hasNotification = 'Notification' in window;
+  const ios = isIosDevice();
+  return {
+    ios,
+    standalone,
+    canSubscribe: hasPush && hasNotification,
+    needsInstall: ios && !standalone,
+  };
+}
+
+async function getVapidPublicKeyCached() {
+  if (cachedVapid?.publicKey) return cachedVapid;
+  cachedVapid = await api('/notifications/vapid-public-key');
+  return cachedVapid;
+}
+
 async function getServiceWorkerRegistration() {
-  const reg = await navigator.serviceWorker.register(SW_URL);
+  const reg = await navigator.serviceWorker.register(SW_URL, SW_REGISTER_OPTS);
   await navigator.serviceWorker.ready;
   return reg;
 }
 
-/** Notification système — essaie plusieurs méthodes (Opera/Windows). */
+/** Notification système — iOS n’a pas `new Notification()`, uniquement le SW. */
 export function showSystemNotification(title, body, clickUrl) {
-  if (Notification.permission !== 'granted') return false;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
 
-  let shown = false;
   const openUrl = clickUrl || '/?screen=matches';
+  const options = { body, tag: `md-${Date.now()}`, data: { url: openUrl } };
 
-  try {
-    const n = new Notification(title, {
-      body,
-      tag: `md-${Date.now()}`,
-      requireInteraction: true,
-    });
-    n.onclick = () => {
-      n.close();
-      window.focus();
-      window.location.assign(openUrl);
-    };
-    shown = true;
-  } catch {
-    /* fallback SW ci-dessous */
+  if (!isIosDevice()) {
+    try {
+      const n = new Notification(title, options);
+      n.onclick = () => {
+        n.close();
+        window.focus();
+        window.location.assign(openUrl);
+      };
+      return true;
+    } catch {
+      /* fallback SW */
+    }
   }
 
-  if (!shown) {
-    navigator.serviceWorker.ready
-      .then(reg => reg.showNotification(title, {
-        body,
-        tag: `md-sw-${Date.now()}`,
-        requireInteraction: true,
-        data: { url: openUrl },
-      }))
-      .catch(() => {});
-  }
-
+  navigator.serviceWorker.ready
+    .then(reg => reg.showNotification(title, options))
+    .catch(() => {});
   return true;
 }
 
 export async function getNotificationStatus() {
+  const ctx = detectPushContext();
   const status = {
-    supported: 'Notification' in window,
-    pushSupported: 'PushManager' in window && 'serviceWorker' in navigator,
-    permission: Notification.permission,
+    supported: ctx.canSubscribe,
+    pushSupported: ctx.canSubscribe,
+    permission: ctx.canSubscribe ? Notification.permission : 'default',
     enabled: notificationsEnabled(),
     subscription: false,
     vapidConfigured: false,
+    ...ctx,
   };
 
-  if (status.pushSupported && Notification.permission === 'granted') {
+  if (ctx.canSubscribe && Notification.permission === 'granted') {
     try {
-      const reg = await navigator.serviceWorker.getRegistration(SW_URL);
+      const reg = await navigator.serviceWorker.getRegistration('/');
       status.subscription = !!(await reg?.pushManager?.getSubscription());
     } catch { /* ignore */ }
   }
 
   try {
-    const vapid = await api('/notifications/vapid-public-key');
+    const vapid = await getVapidPublicKeyCached();
     status.vapidConfigured = !!vapid.configured;
   } catch { /* ignore */ }
 
@@ -192,25 +218,32 @@ export async function showLocalTestNotification() {
 }
 
 export async function enablePushNotifications() {
-  if (!('Notification' in window)) {
-    showToast('Notifications non supportées');
+  const ctx = detectPushContext();
+  if (ctx.needsInstall) {
+    showToast('Sur iPhone : Partager → Sur l’écran d’accueil, puis ouvre l’icône Matchday');
     return false;
   }
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+  if (!ctx.canSubscribe) {
     showToast('Push indisponible sur ce navigateur');
     return false;
   }
 
+  // Précharge VAPID + SW pendant la boîte de permission (geste iOS conservé).
+  const vapidPromise = getVapidPublicKeyCached();
+  const swPromise = getServiceWorkerRegistration();
+
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    showToast('Permission refusée — autorise Matchday dans Opera et Windows');
+    showToast(ctx.ios
+      ? 'Permission refusée — Réglages iPhone → Notifications → Matchday'
+      : 'Permission refusée — autorise Matchday dans le navigateur');
     localStorage.setItem('matchday_notifications', 'off');
     return false;
   }
 
   let vapid;
   try {
-    vapid = await api('/notifications/vapid-public-key');
+    vapid = await vapidPromise;
   } catch {
     showToast('Serveur push non configuré (VAPID dans .env)');
     return false;
@@ -220,31 +253,37 @@ export async function enablePushNotifications() {
     return false;
   }
 
-  await showLocalTestNotification();
+  try {
+    const reg = await swPromise;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub || !applicationServerKeyMatches(sub, vapid.publicKey)) {
+      if (sub) await sub.unsubscribe();
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapid.publicKey),
+      });
+    }
 
-  const reg = await getServiceWorkerRegistration();
-  const existing = await reg.pushManager.getSubscription();
-  if (existing) await existing.unsubscribe();
+    const result = await api('/notifications/subscribe', {
+      method: 'POST',
+      body: JSON.stringify(sub.toJSON()),
+    });
 
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(vapid.publicKey),
-  });
+    localStorage.setItem('matchday_notifications', 'on');
+    await showLocalTestNotification();
 
-  const result = await api('/notifications/subscribe', {
-    method: 'POST',
-    body: JSON.stringify(sub.toJSON()),
-  });
-
-  localStorage.setItem('matchday_notifications', 'on');
-
-  if (result.test?.sent > 0) {
-    showToast('Push activé — vérifie aussi la bannière violette en haut');
-  } else {
-    showToast('Rappels activés — bannière + toast même si push OS bloqué');
+    if (result.test?.sent > 0) {
+      showToast('Push activé — une notif test doit apparaître');
+    } else {
+      showToast(ctx.ios
+        ? 'Abonné — si rien n’arrive, ferme l’app et réessaie depuis l’icône'
+        : 'Rappels activés — bannière + toast même si push OS bloqué');
+    }
+    return true;
+  } catch (err) {
+    showToast(err.message || 'Abonnement push refusé');
+    return false;
   }
-
-  return true;
 }
 
 export async function disablePushNotifications() {
@@ -266,7 +305,7 @@ export async function disablePushNotifications() {
 function applicationServerKeyMatches(subscription, publicKey) {
   const expected = urlBase64ToUint8Array(publicKey);
   const actual = subscription.options?.applicationServerKey;
-  if (!actual) return false;
+  if (!actual) return true;
   const bytes = new Uint8Array(actual);
   if (bytes.length !== expected.length) return false;
   return bytes.every((b, i) => b === expected[i]);
@@ -274,14 +313,15 @@ function applicationServerKeyMatches(subscription, publicKey) {
 
 export async function syncPushIfEnabled() {
   if (!notificationsEnabled()) return;
-  if (!('Notification' in window) || Notification.permission !== 'granted') {
+  const ctx = detectPushContext();
+  if (ctx.needsInstall) return;
+  if (!ctx.canSubscribe || Notification.permission !== 'granted') {
     localStorage.setItem('matchday_notifications', 'off');
     return;
   }
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
   try {
-    const vapid = await api('/notifications/vapid-public-key');
+    const vapid = await getVapidPublicKeyCached();
     if (!vapid.configured || !vapid.publicKey) return;
 
     const reg = await getServiceWorkerRegistration();
@@ -329,19 +369,29 @@ export function openNotificationPanel(anchorEl, { onEnabled, onDisabled }) {
     const panel = document.createElement('div');
     panel.id = 'notif-panel';
     panel.className = 'notif-panel';
+    const installHint = status.needsInstall
+      ? `<p class="notif-panel-hint notif-panel-warn">Sur iPhone, Safari ne peut pas recevoir les push. Installe l’app :</p>
+         <ol class="notif-panel-steps">
+           <li>Bouton <strong>Partager</strong> (carré + flèche)</li>
+           <li><strong>Sur l’écran d’accueil</strong></li>
+           <li>Ouvre Matchday depuis l’icône, puis reviens ici</li>
+         </ol>`
+      : `<p class="notif-panel-hint">Rappels : chaque matin (matchs du jour) et ~1h avant le coup d'envoi si tu n'as pas pronostiqué.</p>`;
+
     panel.innerHTML = `
       <div class="notif-panel-head"><strong>Rappels Matchday</strong></div>
       <div class="notif-panel-row">Permission : <span>${status.permission}</span></div>
       <div class="notif-panel-row">Push abonné : <span>${status.subscription ? 'oui' : 'non'}</span></div>
       <div class="notif-panel-row">Serveur VAPID : <span class="${status.vapidConfigured ? 'notif-ok' : 'notif-warn'}">${status.vapidConfigured ? 'ok' : 'manquant'}</span></div>
       ${!status.vapidConfigured ? `<p class="notif-panel-hint notif-panel-warn">Ajoute <code>VAPID_PUBLIC_KEY</code> et <code>VAPID_PRIVATE_KEY</code> dans les variables Render (ou ton <code>.env</code> local). Génère-les avec <code>npm run vapid:keys</code>.</p>` : ''}
-      <p class="notif-panel-hint">Rappels : chaque matin (matchs du jour) et ~1h avant le coup d'envoi si tu n'as pas pronostiqué.</p>
-      <p class="notif-panel-hint">Sur iPhone : installe l'app sur l'écran d'accueil (PWA) pour recevoir les push. Sinon la bannière violette reste active 1h avant chaque match.</p>
+      ${installHint}
       <div class="notif-panel-actions">
-        ${status.enabled
-          ? `<button type="button" class="btn btn-secondary" id="notif-test">Tester</button>
-             <button type="button" class="btn btn-secondary" id="notif-off">Désactiver</button>`
-          : `<button type="button" class="btn btn-primary" id="notif-on">Activer</button>`}
+        ${status.needsInstall
+          ? ''
+          : status.enabled
+            ? `<button type="button" class="btn btn-secondary" id="notif-test">Tester</button>
+               <button type="button" class="btn btn-secondary" id="notif-off">Désactiver</button>`
+            : `<button type="button" class="btn btn-primary" id="notif-on">Activer</button>`}
       </div>
     `;
 
@@ -351,8 +401,12 @@ export function openNotificationPanel(anchorEl, { onEnabled, onDisabled }) {
     document.body.appendChild(panel);
 
     panel.querySelector('#notif-on')?.addEventListener('click', async () => {
-      const ok = await enablePushNotifications();
-      if (ok) onEnabled?.();
+      try {
+        const ok = await enablePushNotifications();
+        if (ok) onEnabled?.();
+      } catch (err) {
+        showToast(err.message || 'Impossible d’activer les notifications');
+      }
       panel.remove();
     });
     panel.querySelector('#notif-test')?.addEventListener('click', async () => {

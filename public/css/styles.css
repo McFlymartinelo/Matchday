@@ -1990,6 +1990,10 @@ html[data-theme="dark"] .toast-default {
 .notif-panel-warn { color: var(--liga); font-weight: 600; }
 .notif-panel-warn code { font-size: 10px; background: var(--card-soft); padding: 1px 4px; border-radius: 4px; }
 .notif-panel-hint { font-size: 11px; color: var(--ink-soft); line-height: 1.4; margin: 10px 0; }
+.notif-panel-steps {
+  margin: 0 0 10px; padding-left: 18px; font-size: 12px; line-height: 1.5; color: var(--ink);
+}
+.notif-panel-steps li { margin-bottom: 4px; }
 .notif-panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .notif-panel-actions .btn { flex: 1; min-width: 100px; padding: 10px; font-size: 12px; }
 

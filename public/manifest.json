@@ -1,8 +1,10 @@
 {
+  "id": "/",
   "name": "Matchday",
   "short_name": "Matchday",
   "description": "Pronostics football entre amis",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0B1524",
   "theme_color": "#0B1524",
