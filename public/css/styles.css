@@ -954,6 +954,89 @@ body.auth-page {
 .modal-actions { display: flex; flex-direction: column; gap: 8px; }
 .modal-actions .btn { margin-top: 0; }
 
+.club-sheet { max-height: min(86vh, 640px); overflow-y: auto; }
+.club-sheet-title {
+  display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;
+}
+.club-sheet-title .jn {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.club-sheet-crest { flex-shrink: 0; display: flex; align-items: center; }
+.club-sheet-crest .crest-wrap { margin-top: 0; }
+.club-sheet-crest .crest-img,
+.club-sheet-crest .crest-sm {
+  width: 44px; height: 44px; font-size: 12px; border-radius: 12px; margin-top: 0;
+}
+.club-sheet-loading,
+.club-sheet-form-empty {
+  text-align: center; padding: 20px 8px; color: var(--ink-soft);
+  font-weight: 700; font-size: 13px;
+}
+.club-sheet-form-empty { padding: 8px 4px 4px; font-size: 12px; }
+.club-sheet-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.club-sheet-pos {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800;
+  background: var(--border-soft); color: var(--ink-soft); flex-shrink: 0;
+}
+.club-sheet-pos.zone-cl { background: var(--ldc); color: var(--card); }
+.club-sheet-pos.zone-el { background: var(--bundesliga); color: var(--card); }
+.club-sheet-pos.zone-ecl { background: var(--l1); color: var(--card); }
+.club-sheet-pos.zone-po { background: var(--pl); color: var(--card); }
+.club-sheet-pos.zone-relq { background: var(--bundesliga); color: var(--card); }
+.club-sheet-pos.zone-rel { background: var(--liga); color: var(--card); }
+.club-sheet-zone {
+  font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+  background: var(--card-soft); color: var(--ink-soft);
+}
+.club-sheet-zone.zone-cl { background: var(--ldc-bg); color: var(--ldc); }
+.club-sheet-zone.zone-el { background: var(--bundesliga-bg); color: var(--bundesliga); }
+.club-sheet-zone.zone-ecl { background: var(--l1-bg); color: var(--l1); }
+.club-sheet-zone.zone-po { background: var(--pl-bg); color: var(--pl); }
+.club-sheet-zone.zone-relq { background: var(--bundesliga-bg); color: var(--bundesliga); }
+.club-sheet-zone.zone-rel { background: var(--liga-bg); color: var(--liga); }
+.club-sheet-points {
+  display: flex; flex-direction: column; align-items: center;
+  margin: 14px 0 12px;
+}
+.club-sheet-points .duel-score-num { color: var(--ink); }
+.club-sheet-points-lbl {
+  font-size: 11px; font-weight: 800; color: var(--ink-soft);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px;
+}
+.club-sheet-stats {
+  display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px 6px;
+}
+.club-sheet-stat {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--card-soft); border-radius: 12px; padding: 8px 4px;
+}
+.club-sheet-stat:nth-child(-n+4) { grid-column: span 3; }
+.club-sheet-stat:nth-child(n+5) { grid-column: span 4; }
+.club-sheet-stat-val {
+  font-family: 'Baloo 2', sans-serif; font-size: 18px; font-weight: 700;
+  color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.club-sheet-stat-val.positive { color: var(--l1); }
+.club-sheet-stat-val.negative { color: var(--liga); }
+.club-sheet-stat-lbl {
+  font-size: 9px; font-weight: 800; color: var(--ink-soft);
+  text-transform: uppercase; letter-spacing: 0.03em; text-align: center;
+  line-height: 1.2;
+}
+.club-sheet-sep {
+  height: 1px; background: var(--border-soft); margin: 14px 0 12px;
+}
+.club-sheet-form-title {
+  font-size: 11px; font-weight: 800; color: var(--ink-soft);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;
+}
+.club-sheet .league-form { margin: 0; }
+.club-sheet .league-form-cell { cursor: default; }
+
 .group-card {
   border-radius: 16px; border: 2px solid var(--border-soft);
   background: var(--card-soft); overflow: hidden;
@@ -1079,6 +1162,17 @@ body.auth-page {
 .match-top { display: flex; align-items: center; gap: 4px; }
 .team { flex: 1;  display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700;  min-width: 0; }
 .team.right { justify-content: flex-end; text-align: right; }
+.team.team-clickable {
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 4px 2px;
+  margin: -4px -2px;
+}
+.team.team-clickable:hover,
+.team.team-clickable:focus-visible {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  outline: none;
+}
 .crest-sm {
   width: 26px; height: 26px; border-radius: 9px;
   display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0;

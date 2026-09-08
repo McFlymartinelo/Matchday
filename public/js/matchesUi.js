@@ -1,18 +1,24 @@
 import {
   matches, showToast, compColors, teamCrest, formatCountdown, formatKickoffLabel,
   initials, buildTeamLogoMap, normTeamName, findCompetition, escapeHtml,
+  standings,
 } from './api.js';
 import { renderAvatarHtml } from './avatars.js';
+import { zoneBucket, ldcZoneFromRow, formStripHtml, ZONE_LEGEND_LDC } from './championships.js?v=56';
 
 const pendingPredictions = new Map();
+const standingsCache = new Map();
 const autoSaveTimers = new Map();
 let lockRefreshTimer = null;
+let clubSheetSeq = 0;
 let ui = { setActiveComp: () => {}, renderApp: async () => {} };
 
 const LOCKED_STATUSES = new Set(['live', 'inprogress', 'finished', 'FT', 'ended']);
 
 export function resetMatchesUi() {
   pendingPredictions.clear();
+  standingsCache.clear();
+  closeClubSheet();
   stopMatchLockRefresh();
 }
 
@@ -94,7 +100,7 @@ async function focusMatchAfterRender(state, matchId, attempt = 0) {
 }
 
 async function onPronosToggleClick(e, state) {
-  if (e.target.closest('input, button')) return;
+  if (e.target.closest('input, button, .team-clickable')) return;
   const card = e.currentTarget;
   const hint = card.querySelector('.finished-toggle-hint');
   const existing = card.querySelector('.pronos-panel');
@@ -154,12 +160,173 @@ function pronosPanelHtml(predictions, compColor) {
   return `<div class="pronos-panel-header">Pronos du groupe · ${predictions.length}</div>${rows}`;
 }
 
+function getOfficialStandings(groupId, competitionId) {
+  const key = `${groupId}:${competitionId}`;
+  let pending = standingsCache.get(key);
+  if (!pending) {
+    pending = standings.official(groupId, competitionId);
+    standingsCache.set(key, pending);
+    pending.catch(() => {
+      if (standingsCache.get(key) === pending) standingsCache.delete(key);
+    });
+  }
+  return pending;
+}
+
+function findStandingRow(rows, teamId, teamName) {
+  const id = Number(teamId);
+  if (Number.isFinite(id) && id > 0) {
+    const byId = rows.find(r => Number(r.team_id) === id);
+    if (byId) return byId;
+  }
+  const key = normTeamName(teamName);
+  if (!key) return null;
+  return rows.find(r => normTeamName(r.team_name) === key) ?? null;
+}
+
+function zoneForRow(row, compCode) {
+  const isLdc = String(compCode ?? '').toUpperCase() === 'LDC';
+  const key = isLdc ? ldcZoneFromRow(row) : zoneBucket(row.zone_key, row.zone_label);
+  const label = isLdc
+    ? (ZONE_LEGEND_LDC.find(z => z.id === key)?.label ?? '')
+    : (row.zone_label ?? '');
+  return { key, label };
+}
+
+function clubSheetBodyHtml(row, compCode) {
+  if (!row) {
+    return '<div class="empty-state">Classement pas encore synchronisé.</div>';
+  }
+  const { key: zoneKey, label: zoneLabel } = zoneForRow(row, compCode);
+  const zoneClass = zoneKey ? ` zone-${zoneKey}` : '';
+  const gd = (row.goals_for ?? 0) - (row.goals_against ?? 0);
+  const gdStr = gd > 0 ? `+${gd}` : String(gd);
+  const gdClass = gd > 0 ? 'positive' : gd < 0 ? 'negative' : '';
+  const formHtml = formStripHtml(row.form, { hidden: false });
+
+  return `
+    <div class="club-sheet-meta">
+      <span class="club-sheet-pos${zoneClass}">${row.position ?? '–'}</span>
+      ${zoneLabel ? `<span class="club-sheet-zone${zoneClass}">${escapeHtml(zoneLabel)}</span>` : ''}
+    </div>
+    <div class="club-sheet-points">
+      <span class="duel-score-num">${row.points ?? 0}</span>
+      <span class="club-sheet-points-lbl">Points</span>
+    </div>
+    <div class="club-sheet-stats">
+      <div class="club-sheet-stat"><span class="club-sheet-stat-val">${row.played ?? 0}</span><span class="club-sheet-stat-lbl">Joués</span></div>
+      <div class="club-sheet-stat"><span class="club-sheet-stat-val">${row.won ?? 0}</span><span class="club-sheet-stat-lbl">V</span></div>
+      <div class="club-sheet-stat"><span class="club-sheet-stat-val">${row.drawn ?? 0}</span><span class="club-sheet-stat-lbl">N</span></div>
+      <div class="club-sheet-stat"><span class="club-sheet-stat-val">${row.lost ?? 0}</span><span class="club-sheet-stat-lbl">D</span></div>
+      <div class="club-sheet-stat"><span class="club-sheet-stat-val">${row.goals_for ?? 0}</span><span class="club-sheet-stat-lbl">Buts pour</span></div>
+      <div class="club-sheet-stat"><span class="club-sheet-stat-val">${row.goals_against ?? 0}</span><span class="club-sheet-stat-lbl">Buts contre</span></div>
+      <div class="club-sheet-stat"><span class="club-sheet-stat-val ${gdClass}">${gdStr}</span><span class="club-sheet-stat-lbl">Diff.</span></div>
+    </div>
+    <div class="club-sheet-sep"></div>
+    <div class="club-sheet-form-title">5 derniers matchs</div>
+    ${formHtml || '<div class="club-sheet-form-empty">Aucun match récent.</div>'}
+  `;
+}
+
+function onClubSheetKeydown(e) {
+  if (e.key === 'Escape') closeClubSheet();
+}
+
+function closeClubSheet() {
+  clubSheetSeq += 1;
+  document.removeEventListener('keydown', onClubSheetKeydown);
+  document.getElementById('club-sheet-modal')?.remove();
+}
+
+function openClubSheet({ groupId, teamId, teamName, compCode, competitionId }) {
+  closeClubSheet();
+  const seq = clubSheetSeq;
+  const crestId = Number(teamId);
+  const crest = teamCrest(teamName, compCode, Number.isFinite(crestId) && crestId > 0 ? crestId : null);
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-overlay" id="club-sheet-modal">
+      <div class="modal-sheet club-sheet" role="dialog" aria-modal="true" aria-labelledby="club-sheet-name">
+        <div class="modal-head">
+          <div class="club-sheet-title">
+            <span class="club-sheet-crest">${crest}</span>
+            <span class="jn" id="club-sheet-name">${escapeHtml(teamName)}</span>
+          </div>
+          <button type="button" class="modal-close" id="club-sheet-close" aria-label="Fermer">✕</button>
+        </div>
+        <div class="club-sheet-body" id="club-sheet-body">
+          <div class="club-sheet-loading">Chargement…</div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modal = document.getElementById('club-sheet-modal');
+  document.getElementById('club-sheet-close').onclick = closeClubSheet;
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeClubSheet(); });
+  document.addEventListener('keydown', onClubSheetKeydown);
+
+  fillClubSheet(seq, { groupId, teamId, teamName, compCode, competitionId });
+}
+
+async function fillClubSheet(seq, { groupId, teamId, teamName, compCode, competitionId }) {
+  const body = () => document.getElementById('club-sheet-body');
+  try {
+    const rows = await getOfficialStandings(groupId, competitionId);
+    if (seq !== clubSheetSeq) return;
+    const el = body();
+    if (!el) return;
+    if (!Array.isArray(rows) || !rows.length) {
+      el.innerHTML = clubSheetBodyHtml(null, compCode);
+      return;
+    }
+    const row = findStandingRow(rows, teamId, teamName);
+    el.innerHTML = clubSheetBodyHtml(row, compCode);
+  } catch (err) {
+    if (seq !== clubSheetSeq) return;
+    showToast(err.message, 'error');
+    const el = body();
+    if (el) el.innerHTML = clubSheetBodyHtml(null, compCode);
+  }
+}
+
+function teamClickableHtml(name, teamId, m, side) {
+  const idAttr = teamId != null && teamId !== '' ? String(Number(teamId)) : '';
+  const classes = side === 'away' ? 'team right team-clickable' : 'team team-clickable';
+  const nameHtml = `<span class="team-name">${escapeHtml(name)}</span>`;
+  const crest = teamCrest(name, m.comp_code, teamId);
+  const inner = side === 'away' ? `${nameHtml}${crest}` : `${crest}${nameHtml}`;
+  return `<div class="${classes}" role="button" tabindex="0" data-team-id="${idAttr}" data-team-name="${escapeHtml(name)}" data-comp-code="${escapeHtml(m.comp_code ?? '')}" data-competition-id="${m.competition_id ?? ''}">${inner}</div>`;
+}
+
+function bindTeamSheetClicks(el, state) {
+  el.querySelectorAll('.team-clickable').forEach((node) => {
+    const open = (e) => {
+      e.stopPropagation();
+      openClubSheet({
+        groupId: state.group.id,
+        teamId: node.dataset.teamId,
+        teamName: node.dataset.teamName,
+        compCode: node.dataset.compCode,
+        competitionId: node.dataset.competitionId,
+      });
+    };
+    node.addEventListener('click', open);
+    node.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      open(e);
+    });
+  });
+}
+
 export async function renderMatches(el, state, hooks = {}) {
   ui = {
     setActiveComp: hooks.setActiveComp ?? ui.setActiveComp,
     renderApp: hooks.renderApp ?? ui.renderApp,
   };
   pendingPredictions.clear();
+  standingsCache.clear();
   for (const timer of autoSaveTimers.values()) clearTimeout(timer);
   autoSaveTimers.clear();
   stopMatchLockRefresh();
@@ -311,6 +478,7 @@ export async function renderMatches(el, state, hooks = {}) {
     });
 
     el.querySelectorAll('.match-card-locked').forEach(card => bindPronosToggle(card, state));
+    bindTeamSheetClicks(el, state);
 
     startMatchLockRefresh(state);
 
@@ -340,8 +508,6 @@ function matchCardHtml(m, cc, logoMap) {
   const awayTeamId = resolveBsdTeamId(m, 'away', logoMap);
   const kickoffLabel = formatKickoffLabel(m.kickoff_at);
   const kickoffHtml = kickoffLabel ? `<div class="match-kickoff">${kickoffLabel}</div>` : '';
-  const homeName = escapeHtml(m.home_team_name);
-  const awayName = escapeHtml(m.away_team_name);
 
   const isFinished = m.isLocked
     && ['finished', 'FT', 'ended'].includes(m.status)
@@ -358,13 +524,13 @@ function matchCardHtml(m, cc, logoMap) {
     return `<div class="match-card match-card-locked match-card-finished" data-match="${m.id}" data-kickoff="${m.kickoff_at}" data-status="${m.status}" data-locked="1" data-home-score="${h}" data-away-score="${a}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
     ${kickoffHtml}
     <div class="match-top">
-      <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${homeName}</span></div>
+      ${teamClickableHtml(m.home_team_name, homeTeamId, m, 'home')}
       <div class="score-mid score-finished">
         <div class="finished-result" style="color:${cc.color}">${m.home_score} – ${m.away_score}</div>
         <div class="finished-lbl">Score réel</div>
         ${pronoLine}
       </div>
-      <div class="team right"><span class="team-name">${awayName}</span>${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
+      ${teamClickableHtml(m.away_team_name, awayTeamId, m, 'away')}
     </div>
     <div class="finished-toggle-hint">Voir les pronos du groupe</div>
   </div>`;
@@ -391,7 +557,7 @@ function matchCardHtml(m, cc, logoMap) {
   return `<div class="match-card${m.isLocked ? ' match-card-locked' : ''}" data-match="${m.id}" data-kickoff="${m.kickoff_at}" data-status="${m.status}" data-locked="${m.isLocked ? '1' : '0'}" data-home-score="${h}" data-away-score="${a}" data-comp-color="${cc.color}" data-comp-bg="${cc.bg}">
     ${kickoffHtml}
     <div class="match-top">
-      <div class="team">${teamCrest(m.home_team_name, m.comp_code, homeTeamId)}<span class="team-name">${homeName}</span></div>
+      ${teamClickableHtml(m.home_team_name, homeTeamId, m, 'home')}
       <div class="score-mid">
         <div class="score-pill ${filled ? 'filled' : ''}" style="${filled ? `color:${cc.color};border-color:${cc.color};background:${cc.bg}` : ''}">
           ${m.isLocked ? (h !== '' ? h : '–') : `<input type="number" min="0" max="20" data-side="home" data-match="${m.id}" value="${h}" placeholder="–">`}
@@ -400,7 +566,7 @@ function matchCardHtml(m, cc, logoMap) {
           ${m.isLocked ? (a !== '' ? a : '–') : `<input type="number" min="0" max="20" data-side="away" data-match="${m.id}" value="${a}" placeholder="–">`}
         </div>
       </div>
-      <div class="team right"><span class="team-name">${awayName}</span>${teamCrest(m.away_team_name, m.comp_code, awayTeamId)}</div>
+      ${teamClickableHtml(m.away_team_name, awayTeamId, m, 'away')}
     </div>
     <div class="match-bottom ${bottomClass}" style="${bottomClass === 'points' ? `color:${cc.color}` : ''}">${bottom}</div>
     ${pronosHint}

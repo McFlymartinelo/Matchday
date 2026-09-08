@@ -8,13 +8,13 @@ const ZONE_LEGEND = [
   { id: 'rel', label: 'Relégation' },
 ];
 
-const ZONE_LEGEND_LDC = [
+export const ZONE_LEGEND_LDC = [
   { id: 'cl', label: '8es de finale' },
   { id: 'po', label: 'Play-offs' },
   { id: 'rel', label: 'Éliminé' },
 ];
 
-function zoneBucket(zoneKey, zoneLabel = '') {
+export function zoneBucket(zoneKey, zoneLabel = '') {
   const key = String(zoneKey ?? '').toLowerCase();
   const label = String(zoneLabel ?? '').toLowerCase();
   if (key === 'po' || key === 'kpo') return 'po';
@@ -30,7 +30,7 @@ function zoneBucket(zoneKey, zoneLabel = '') {
   return null;
 }
 
-function ldcZoneFromRow(row) {
+export function ldcZoneFromRow(row) {
   const p = Number(row.position);
   if (p >= 1 && p <= 8) return 'cl';
   if (p >= 9 && p <= 24) return 'po';
@@ -38,9 +38,10 @@ function ldcZoneFromRow(row) {
   return zoneBucket(row.zone_key, row.zone_label);
 }
 
-function formStripHtml(form) {
+export function formStripHtml(form, { hidden = true } = {}) {
   if (!form?.length) return '';
-  return `<div class="league-form" hidden style="--form-n:${form.length}">${form.map((m) => {
+  const hiddenAttr = hidden ? ' hidden' : '';
+  return `<div class="league-form"${hiddenAttr} style="--form-n:${form.length}">${form.map((m) => {
     const title = `${m.venue === 'D' ? 'Domicile' : 'Extérieur'} · ${escapeHtml(m.opponent)} ${m.gf}-${m.ga}`;
     const oppId = m.opponent_id ? ` data-opp-id="${Number(m.opponent_id)}"` : '';
     return `<div class="league-form-cell"${oppId} data-opp-key="${escapeHtml(normTeamName(m.opponent))}" title="${title}">
