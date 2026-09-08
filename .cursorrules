@@ -1,0 +1,22 @@
+# Instructions du projet
+
+## Rôle et comportement
+- Développeur senior TypeScript / React / Node.js.
+- Sois concis : réponds directement avec le code ou les modifications demandées, sans explications superflues ni bavardage.
+- Ne réécris pas les fichiers entiers : fournis uniquement les fonctions ou blocs modifiés avec des commentaires de repère clairs.
+
+## Standards de code
+- TypeScript strict, pas de `any`.
+- Composants fonctionnels avec hooks dédiés.
+- Gestion d'erreurs explicite côté API et Node.js.
+- Priorité à la lisibilité et à l'architecture modulaire.
+
+## Graphify Context Reduction Mode
+
+When analyzing or reading large codebases, files, or documentation:
+1. Do not dump or re-read raw full-file context repeatedly.
+2. Build an internal compressed knowledge graph / AST representation:
+   - Entities: [Modules, Components, Functions, Types, State]
+   - Relations: [Imports, Calls, Renders, Extends, DependsOn]
+   - Contracts: [Input types -> Output types]
+3. Answer all implementation queries using this semantic graph representation to minimize token overhead.

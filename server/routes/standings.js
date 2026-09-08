@@ -5,6 +5,8 @@ import { getCompetitionSeason } from '../lib/season.js';
 import { applyZonesToRows, defaultEuropeanZones } from '../lib/standingZones.js';
 import { withRanks } from '../lib/scoring.js';
 import { buildRankingHistory, accumulateHistory, buildPointsByRound } from '../lib/rankingHistory.js';
+import { attachFormToStandings } from '../lib/teamForm.js';
+import { normalizeTeamName } from '../services/bsd.js';
 
 const router = Router();
 
@@ -167,6 +169,7 @@ router.get('/:groupId/standings/official/:competitionId', authRequired, groupMem
     [compId, season]
   );
   rows = decorateStandingZones(dedupeStandingsRows(rows), (await get('SELECT code FROM competitions WHERE id = ?', [compId]))?.code);
+  rows = await withTeamForm(compId, season, rows);
   res.json(rows);
 });
 
@@ -174,6 +177,48 @@ function decorateStandingZones(rows, compCode) {
   const withStored = applyZonesToRows(rows, []);
   if (withStored.some(r => r.zone_key)) return withStored;
   return applyZonesToRows(rows, defaultEuropeanZones(compCode, rows.length));
+}
+
+async function loadFinishedMatches(compId, season) {
+  return all(
+    `SELECT matchday, kickoff_at, home_team_name, away_team_name, home_score, away_score,
+            home_bsd_team_id, away_bsd_team_id
+     FROM matches
+     WHERE competition_id = ? AND season = ?
+       AND status IN ${FINISHED_STATUSES}
+       AND home_score IS NOT NULL AND away_score IS NOT NULL
+     ORDER BY kickoff_at DESC, id DESC`,
+    [compId, season]
+  );
+}
+
+async function loadShortNames(compId) {
+  const teams = await all(
+    `SELECT name, short_name, bsd_team_id FROM teams
+     WHERE competition_id = ? AND short_name IS NOT NULL AND short_name != ''`,
+    [compId]
+  );
+  const map = new Map();
+  for (const t of teams) {
+    const code = String(t.short_name).replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase();
+    if (!code) continue;
+    if (t.bsd_team_id != null) map.set(Number(t.bsd_team_id), code);
+    map.set(normalizeTeamName(t.name), code);
+  }
+  return map;
+}
+
+async function withTeamForm(compId, season, rows) {
+  try {
+    const [matches, shortNames] = await Promise.all([
+      loadFinishedMatches(compId, season),
+      loadShortNames(compId),
+    ]);
+    return attachFormToStandings(rows, matches, shortNames);
+  } catch (err) {
+    console.warn(`Forme clubs ${compId}:`, err.message);
+    return rows.map((row) => ({ ...row, form: [] }));
+  }
 }
 
 function dedupeStandingsRows(rows) {
@@ -203,6 +248,7 @@ router.get('/:groupId/standings/official', authRequired, groupMemberRequired, as
       [c.id, season]
     );
     rows = decorateStandingZones(dedupeStandingsRows(rows), c.code);
+    rows = await withTeamForm(c.id, season, rows);
     result.push({
       competition: {
         id: c.id, code: c.code, nom: c.nom, emoji: c.emoji, logo: c.logo,

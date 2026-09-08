@@ -50,7 +50,7 @@ function scheduleJobs() {
   }
 }
 
-async function initData() {
+async function initLocal() {
   await migrate();
   await seedCompetitions();
   await cleanupTestMatches();
@@ -61,7 +61,9 @@ async function initData() {
   } catch (err) {
     console.warn('Inversion domicile PSG–Rennes échouée :', err.message);
   }
+}
 
+async function initRemote() {
   if (process.env.BSD_API_TOKEN?.trim()) {
     try {
       await syncLeagueIds();
@@ -107,7 +109,7 @@ async function initData() {
 async function start() {
   assertJwtSecret();
   try {
-    await initData();
+    await initLocal();
     console.log('Base de données prête');
   } catch (err) {
     console.error('Init base de données échouée :', err.message);
@@ -118,6 +120,10 @@ async function start() {
   app.listen(PORT, '0.0.0.0', () => {
     const host = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
     console.log(`Matchday démarré sur ${host}`);
+  });
+
+  initRemote().catch((err) => {
+    console.error('Init distante échouée :', err.message);
   });
 }
 

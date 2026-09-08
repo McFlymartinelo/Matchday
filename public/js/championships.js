@@ -38,6 +38,79 @@ function ldcZoneFromRow(row) {
   return zoneBucket(row.zone_key, row.zone_label);
 }
 
+function formStripHtml(form) {
+  if (!form?.length) return '';
+  return `<div class="league-form" hidden style="--form-n:${form.length}">${form.map((m) => {
+    const title = `${m.venue === 'D' ? 'Domicile' : 'Extérieur'} · ${escapeHtml(m.opponent)} ${m.gf}-${m.ga}`;
+    const oppId = m.opponent_id ? ` data-opp-id="${Number(m.opponent_id)}"` : '';
+    return `<div class="league-form-cell"${oppId} data-opp-key="${escapeHtml(normTeamName(m.opponent))}" title="${title}">
+      <span class="league-form-dot ${m.result}">${m.result}</span>
+      <span class="league-form-score">${m.gf}-${m.ga}</span>
+      <span class="league-form-opp">${m.venue} ${escapeHtml(m.opp)}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function bindFormOpponentHover(card) {
+  const clear = () => {
+    card.querySelectorAll('.league-row.is-form-target').forEach((row) => {
+      row.classList.remove('is-form-target');
+    });
+    card.querySelectorAll('.league-form-cell.is-hot').forEach((cell) => {
+      cell.classList.remove('is-hot');
+    });
+  };
+
+  card.querySelectorAll('.league-form-cell').forEach((cell) => {
+    const highlight = (on) => {
+      clear();
+      if (!on) return;
+      const oppId = cell.dataset.oppId;
+      const oppKey = cell.dataset.oppKey;
+      cell.classList.add('is-hot');
+      card.querySelectorAll('.league-row[data-team-key]').forEach((row) => {
+        const byId = oppId && row.dataset.teamId
+          ? row.dataset.teamId === oppId
+          : false;
+        const byKey = !row.dataset.teamId || !oppId
+          ? Boolean(oppKey && row.dataset.teamKey === oppKey)
+          : false;
+        if (byId || byKey) row.classList.add('is-form-target');
+      });
+    };
+    cell.addEventListener('pointerenter', () => highlight(true));
+    cell.addEventListener('pointerleave', () => highlight(false));
+  });
+}
+
+function bindLeagueFormToggles(root) {
+  root.querySelectorAll('.league-table-card').forEach((card) => {
+    bindFormOpponentHover(card);
+    card.querySelectorAll('[data-form-toggle]').forEach((row) => {
+      const toggle = () => {
+        const wrap = row.closest('.league-row-block');
+        const strip = wrap?.querySelector('.league-form');
+        if (!strip) return;
+        const willOpen = strip.hasAttribute('hidden');
+        card.querySelectorAll('.league-form').forEach((el) => { el.hidden = true; });
+        card.querySelectorAll('.league-row.is-open').forEach((el) => el.classList.remove('is-open'));
+        card.querySelectorAll('.league-row.is-form-target').forEach((el) => el.classList.remove('is-form-target'));
+        if (willOpen) {
+          strip.hidden = false;
+          row.classList.add('is-open');
+        }
+      };
+      row.addEventListener('click', toggle);
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle();
+        }
+      });
+    });
+  });
+}
+
 function renderLeagueTable(comp, rows, logoMap) {
   const cc = compColors(comp.code);
 
@@ -80,7 +153,17 @@ function renderLeagueTable(comp, rows, logoMap) {
         ? (ZONE_LEGEND_LDC.find(z => z.id === zone)?.label ?? '')
         : (r.zone_label ?? '');
       const zoneTitle = zoneLabel ? ` title="${escapeHtml(zoneLabel)}"` : '';
-      return `<div class="league-row${zone ? ` zone-${zone}` : ''}"${zoneTitle}>
+      const hasForm = Array.isArray(r.form) && r.form.length > 0;
+      const rowClass = [
+        'league-row',
+        zone ? `zone-${zone}` : '',
+        hasForm ? 'league-row-clickable' : '',
+      ].filter(Boolean).join(' ');
+      const teamKey = escapeHtml(normTeamName(r.team_name));
+      const teamAttr = ` data-team-key="${teamKey}"${teamId ? ` data-team-id="${Number(teamId)}"` : ''}`;
+      const toggleAttrs = hasForm ? ' data-form-toggle role="button" tabindex="0"' : '';
+      return `<div class="league-row-block">
+        <div class="${rowClass}"${teamAttr}${toggleAttrs}${zoneTitle}>
         <span class="league-pos">${r.position}</span>
         <span class="league-team">
           ${teamCrest(r.team_name, comp.code, teamId)}
@@ -89,6 +172,8 @@ function renderLeagueTable(comp, rows, logoMap) {
         <span class="league-stat">${r.played ?? 0}</span>
         <span class="league-stat ${gd > 0 ? 'positive' : gd < 0 ? 'negative' : ''}">${gdStr}</span>
         <span class="league-pts">${r.points ?? 0}</span>
+      </div>
+      ${formStripHtml(r.form)}
       </div>`;
     }).join('')}
     ${legend.length ? `<div class="league-legend">${legend.map(z =>
@@ -124,6 +209,7 @@ export async function renderChampionships(el, state) {
       </div>
       ${(filtered.length ? filtered : data).map(d => renderLeagueTable(d.competition, d.rows, logoMap)).join('')}
     `;
+    bindLeagueFormToggles(el);
   } catch (err) {
     el.innerHTML = `<div class="section-card"><div class="empty-state">${escapeHtml(err.message)}</div></div>`;
     showToast(err.message);

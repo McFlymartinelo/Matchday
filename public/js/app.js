@@ -3,7 +3,7 @@ import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
 import { renderProfile } from './profile.js?v=2';
-import { renderChampionships } from './championships.js?v=53';
+import { renderChampionships } from './championships.js?v=55';
 import { renderSeasonXi } from './seasonXi.js';
 import { renderStandingsScreen, compPillsHtml } from './standingsUi.js?v=65';
 import { renderMatches, resetMatchesUi } from './matchesUi.js?v=54';

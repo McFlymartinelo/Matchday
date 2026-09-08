@@ -1,0 +1,32 @@
+# Dépendances
+node_modules/
+.pnpm-store/
+
+# Builds et bundles
+dist/
+build/
+.next/
+.expo/
+out/
+coverage/
+
+# Lockfiles et métadonnées lourdes
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Assets volumineux
+*.svg
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.mp4
+*.wasm
+
+# Logs et caches
+*.log
+.turbo/
+.cache/
+.nyc_output/

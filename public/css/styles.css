@@ -43,6 +43,7 @@ html[data-theme="dark"] {
   --liga-bg: #2a1814;
   --serie-bg: #121f33;
   --bundesliga-bg: #2a1e12;
+  --ldc: #6C8CFF;
   --ldc-bg: #10182c;
   --chat-other-bg: #252d3d;
   --chat-input-bg: #0d121c;
@@ -1871,6 +1872,57 @@ html[data-theme="dark"] .league-row.relegation {
 }
 .league-row.leader .league-pts {
   color: var(--league-color, var(--pl));
+}
+.league-row-clickable { cursor: pointer; }
+.league-row.is-open {
+  outline: 1px solid var(--border-soft);
+  margin-bottom: 0;
+}
+.league-form {
+  display: grid;
+  grid-template-columns: repeat(var(--form-n, 5), minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 2px 29px;
+  padding: 4px 4px 6px;
+  border-radius: 8px;
+  background: var(--card-soft);
+}
+.league-form[hidden] { display: none; }
+.league-row.is-form-target {
+  outline: 1px solid var(--league-color, var(--pl));
+  background: color-mix(in srgb, var(--league-color, var(--pl)) 18%, var(--card));
+}
+.league-form-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.league-form-cell.is-hot {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.league-form-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 800; line-height: 1;
+  color: #fff;
+}
+.league-form-dot.V { background: var(--l1); }
+.league-form-dot.N { background: var(--border-soft); color: var(--ink-soft); }
+.league-form-dot.D { background: var(--liga); }
+.league-form-score {
+  font-size: 10px; font-weight: 700; line-height: 12px;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.league-form-opp {
+  font-size: 9px; font-weight: 600; line-height: 11px;
+  color: var(--ink-soft); letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 .league-legend {
   display: flex; gap: 10px 16px; justify-content: center; flex-wrap: wrap; margin-top: 12px;
