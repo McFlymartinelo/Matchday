@@ -1,4 +1,4 @@
-/** Observateurs : membres du groupe, absents du classement. */
+/** Observateurs : membres du groupe, absents du classement et de l’onglet vainqueurs. */
 export const STANDINGS_OBSERVERS = [
   { groupName: 'La cousinade', username: 'marty' },
 ];

@@ -5,6 +5,7 @@ import { scoreSpecialBet } from '../lib/scoring.js';
 import { scoreChampionBetsForCompetition } from '../lib/championBets.js';
 import { getCompetitionSeason } from '../lib/season.js';
 import { isChampionBetOpen } from '../lib/competitions.js';
+import { RANKED_MEMBERS_WHERE } from '../lib/standingsVisibility.js';
 
 const router = Router();
 
@@ -40,7 +41,7 @@ router.get('/:groupId/special-bets/group', authRequired, groupMemberRequired, as
     `SELECT u.id, u.display_name, u.avatar, u.profile_color
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id
-     WHERE gm.group_id = ?
+     WHERE gm.group_id = ? AND ${RANKED_MEMBERS_WHERE}
      ORDER BY CASE WHEN u.id = ? THEN 0 ELSE 1 END, u.display_name COLLATE NOCASE`,
     [req.groupId, req.user.id]
   );
@@ -65,6 +66,7 @@ router.get('/:groupId/special-bets/group', authRequired, groupMemberRequired, as
     revealed: !isChampionBetOpen(c.code),
   }));
   const revealedIds = new Set(competitions.filter(c => c.revealed).map(c => c.id));
+  const rankedIds = new Set(members.map(u => u.id));
 
   res.json({
     competitions,
@@ -75,7 +77,7 @@ router.get('/:groupId/special-bets/group', authRequired, groupMemberRequired, as
       profileColor: u.profile_color,
     })),
     bets: bets
-      .filter(b => revealedIds.has(b.competition_id) || b.user_id === req.user.id)
+      .filter(b => rankedIds.has(b.user_id) && (revealedIds.has(b.competition_id) || b.user_id === req.user.id))
       .map(b => ({
         userId: b.user_id,
         competitionId: b.competition_id,

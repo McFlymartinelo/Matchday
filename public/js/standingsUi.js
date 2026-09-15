@@ -1,4 +1,4 @@
-import { standings, specialBets, groups, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml, normTeamName } from './api.js?v=64';
+import { standings, specialBets, groups, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml, normTeamName } from './api.js?v=65';
 import { renderAvatarHtml, clubCrestLetters } from './avatars.js';
 import { mountRankingChart } from './rankingChart.js?v=65';
 
@@ -395,11 +395,15 @@ function paintWinnersTab(body, state, payload, shortByNorm) {
     const revealed = !!selected.revealed;
     const ranked = pickGroupsForComp(members, bets, selected.id, revealed, currentUserId);
     if (!revealed) {
+      const me = members.find(m => m.userId === currentUserId);
       const mine = ranked.find(g => g.members.some(m => m.userId === currentUserId));
       const mineLabel = mine?.team ? escapeHtml(shortClubLabel(mine.team, shortByNorm)) : 'Pas de prono';
+      const mineRow = me
+        ? `<div class="winners-detail-people"><span class="winners-person">${winnersAvatar(me)} Ton prono : ${mineLabel}</span></div>`
+        : '';
       detailHtml = `<div class="winners-detail">
         <strong>${escapeHtml(selected.nom)}</strong> — les pronos du groupe seront visibles après le verrouillage.
-        <div class="winners-detail-people"><span class="winners-person">${winnersAvatar(members.find(m => m.userId === currentUserId) ?? { displayName: state.user.displayName, avatar: state.user.avatar, profileColor: state.user.profileColor })} Ton prono : ${mineLabel}</span></div>
+        ${mineRow}
       </div>`;
     } else {
       detailHtml = `<div class="winners-detail">

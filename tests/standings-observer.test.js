@@ -67,7 +67,7 @@ describe('classement — observateur Marty / La cousinade', () => {
     );
     leaId = Number(lea.lastInsertRowid);
 
-    const l1 = await get("SELECT id FROM competitions WHERE code = 'L1'");
+    const l1 = await get("SELECT id, saison_active FROM competitions WHERE code = 'L1'");
     const cousinade = await run(
       'INSERT INTO groups (name, invite_code, admin_id) VALUES (?, ?, ?)',
       ['La cousinade', 'COUSIN01', martyId]
@@ -86,6 +86,11 @@ describe('classement — observateur Marty / La cousinade', () => {
     await run(
       'INSERT INTO group_competitions (group_id, competition_id) VALUES (?, ?), (?, ?)',
       [cousinadeId, l1.id, copainsId, l1.id]
+    );
+    await run(
+      `INSERT INTO special_bets (user_id, group_id, competition_id, season, bet_type, bet_value)
+       VALUES (?, ?, ?, ?, 'champion', 'PSG'), (?, ?, ?, ?, 'champion', 'OM')`,
+      [martyId, cousinadeId, l1.id, l1.saison_active, leaId, cousinadeId, l1.id, l1.saison_active]
     );
 
     const app = createApp();
@@ -147,6 +152,12 @@ describe('classement — observateur Marty / La cousinade', () => {
     assert.equal(profile.data.excludeFromStandings, true);
     assert.equal(profile.data.rank, null);
     assert.equal(profile.data.memberCount, 1);
+
+    const winners = await jsonFetch(base, `/api/groups/${cousinadeId}/special-bets/group`, { token });
+    assert.equal(winners.status, 200);
+    assert.equal(winners.data.members.some(m => Number(m.userId) === martyId), false);
+    assert.ok(winners.data.members.some(m => Number(m.userId) === leaId));
+    assert.equal(winners.data.bets.some(b => Number(b.userId) === martyId), false);
   });
 
   it('compte Marty dans le classement des autres groupes', async () => {

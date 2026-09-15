@@ -1,11 +1,11 @@
-import { auth, groups, matches, showToast, compId, sameCompId, loadSavedCompId, saveCompId, escapeHtml } from './api.js?v=64';
+import { auth, groups, matches, showToast, compId, sameCompId, loadSavedCompId, saveCompId, escapeHtml } from './api.js?v=65';
 import { renderChatScreen } from './chatUi.js';
 import './theme.js';
 import { renderAvatarHtml } from './avatars.js';
 import { renderProfile } from './profile.js?v=4';
 import { renderChampionships } from './championships.js?v=56';
 import { renderSeasonXi } from './seasonXi.js';
-import { renderStandingsScreen, compPillsHtml } from './standingsUi.js?v=66';
+import { renderStandingsScreen, compPillsHtml } from './standingsUi.js?v=68';
 import { renderMatches, resetMatchesUi } from './matchesUi.js?v=55';
 import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers, navigateToMatchDeepLink } from './notifications.js?v=3';
 import { startMatchReminders, stopMatchReminders, handlePushPayload } from './reminders.js';
