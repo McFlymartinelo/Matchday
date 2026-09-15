@@ -49,12 +49,15 @@ export function isChampionsLeagueMainEvent(code, roundName, kickoffAt, seasonLab
 export function matchesBsdLeagueRule(league, rule) {
   if (!league || league.is_women) return false;
   const name = String(league.name ?? '').toLowerCase();
-  const compact = name.replace(/[\s-]/g, '');
+  const compact = name.replace(/[\s.-]/g, '');
   const country = String(league.country ?? '').toLowerCase();
-  if (rule.exclude?.some(x => name.includes(x))) return false;
+  if (rule.exclude?.some(x => {
+    const needle = x.toLowerCase();
+    return name.includes(needle) || compact.includes(needle.replace(/[\s.-]/g, ''));
+  })) return false;
   const nameMatch = rule.names.some(n => {
     const needle = n.toLowerCase();
-    return name.includes(needle) || compact.includes(needle.replace(/[\s-]/g, ''));
+    return name.includes(needle) || compact.includes(needle.replace(/[\s.-]/g, ''));
   });
   if (!nameMatch) return false;
   if (!rule.country) return true;
@@ -62,18 +65,40 @@ export function matchesBsdLeagueRule(league, rule) {
   return countries.some(c => !c || country.includes(c));
 }
 
+function bsdLeagueScore(league, rule) {
+  const name = String(league.name ?? '').toLowerCase().trim();
+  let score = 0;
+  if (name.includes('uefa')) score += 1000;
+  if ((rule.names ?? []).some(n => name === n.toLowerCase())) score += 500;
+  if (/^[23](\.|nd|rd)?\b/.test(name)) score -= 800;
+  if (/\b(2|ii|zweite|segunda)\b/.test(name)) score -= 400;
+  return score - name.length;
+}
+
 export function pickBsdLeague(leagues, rule) {
   const candidates = leagues.filter(l => matchesBsdLeagueRule(l, rule));
   if (!candidates.length) return null;
-  return candidates.find(l => String(l.name ?? '').toLowerCase().includes('uefa')) ?? candidates[0];
+  return candidates.slice().sort((a, b) => bsdLeagueScore(b, rule) - bsdLeagueScore(a, rule))[0];
 }
 
 export const BSD_LEAGUE_MAPPING = {
   L1: { names: ['ligue 1'], country: 'france' },
   PL: { names: ['premier league'], country: 'england' },
-  PD: { names: ['laliga', 'la liga', 'primera'], country: 'spain' },
-  SA: { names: ['serie a'], country: 'italy' },
-  BL1: { names: ['bundesliga'], country: 'germany' },
+  PD: {
+    names: ['laliga', 'la liga', 'primera'],
+    country: 'spain',
+    exclude: ['hypermotion', 'segunda', 'laliga2', 'la liga 2'],
+  },
+  SA: { names: ['serie a'], country: 'italy', exclude: ['serie b', 'serie c'] },
+  BL1: {
+    names: ['bundesliga'],
+    country: 'germany',
+    exclude: [
+      '2. bundesliga', '2 bundesliga', 'bundesliga 2', 'zweite',
+      '3. liga', '3 liga', 'frauen', 'playoff', 'play-off',
+      'relegation', 'junior', 'u19', 'u17',
+    ],
+  },
   LDC: {
     names: ['uefa champions league', 'champions league'],
     country: ['europe', 'uefa', 'world', 'international', ''],

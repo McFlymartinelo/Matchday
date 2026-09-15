@@ -153,6 +153,7 @@ function matchesKey(name, key) {
       || (n.includes('paris') && !n.includes('germain') && !n.includes('psg') && !n.includes('saint'));
   }
   if (k === 'milan') return n.includes('milan') && !n.includes('inter');
+  if (k === 'rennes') return n.includes('rennes') || n.includes('rennais');
   return n.includes(k);
 }
 

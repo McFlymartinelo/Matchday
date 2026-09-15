@@ -49,4 +49,22 @@ describe('competitions helpers', () => {
     const found = pickBsdLeague(leagues, BSD_LEAGUE_MAPPING.LDC);
     assert.equal(found?.id, 20);
   });
+
+  it('prend la Bundesliga 1 et ignore la 2. Bundesliga', () => {
+    const leagues = [
+      { id: 2, name: '2. Bundesliga', country: 'Germany', is_women: false },
+      { id: 1, name: 'Bundesliga', country: 'Germany', is_women: false },
+      { id: 3, name: '3. Liga', country: 'Germany', is_women: false },
+      { id: 4, name: 'DFB-Pokal', country: 'Germany', is_women: false },
+    ];
+    const found = pickBsdLeague(leagues, BSD_LEAGUE_MAPPING.BL1);
+    assert.equal(found?.id, 1);
+  });
+
+  it('ne retombe pas sur la 2. Bundesliga si la D1 est absente', () => {
+    const leagues = [
+      { id: 2, name: '2. Bundesliga', country: 'Germany', is_women: false },
+    ];
+    assert.equal(pickBsdLeague(leagues, BSD_LEAGUE_MAPPING.BL1), null);
+  });
 });

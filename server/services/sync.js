@@ -10,6 +10,49 @@ function normalizeWithOverrides(event, competitionId) {
   return applyVenueOverride(bsd.normalizeEvent(event, competitionId));
 }
 
+async function loadLeagueRoster(bsdLeagueId, seasonLabel) {
+  const seasonId = await resolveBsdSeasonId(bsdLeagueId, seasonLabel);
+  const teams = await bsd.getStandingTeams(bsdLeagueId, seasonId);
+  if (!teams?.length) return null;
+  return {
+    names: new Set(teams.map(t => bsd.normalizeTeamName(t.team_name))),
+    ids: new Set(teams.map(t => Number(t.team_id)).filter(n => Number.isFinite(n) && n > 0)),
+  };
+}
+
+function matchInRoster(homeName, awayName, homeId, awayId, roster) {
+  if (!roster) return true;
+  const homeOk = (homeId && roster.ids.has(Number(homeId)))
+    || roster.names.has(bsd.normalizeTeamName(homeName));
+  const awayOk = (awayId && roster.ids.has(Number(awayId)))
+    || roster.names.has(bsd.normalizeTeamName(awayName));
+  return Boolean(homeOk && awayOk);
+}
+
+async function purgeMatchesOutsideRoster(competitionId, seasonLabel, roster) {
+  if (!roster) return 0;
+  const rows = await all(
+    `SELECT id, home_team_name, away_team_name, home_bsd_team_id, away_bsd_team_id
+     FROM matches WHERE competition_id = ? AND season = ?`,
+    [competitionId, seasonLabel]
+  );
+  const ids = rows
+    .filter(m => !matchInRoster(m.home_team_name, m.away_team_name, m.home_bsd_team_id, m.away_bsd_team_id, roster))
+    .map(m => m.id);
+  if (!ids.length) return 0;
+  const placeholders = ids.map(() => '?').join(',');
+  await run(
+    `DELETE FROM prediction_reactions WHERE prediction_id IN (
+       SELECT id FROM predictions WHERE match_id IN (${placeholders})
+     )`,
+    ids
+  );
+  await run(`DELETE FROM predictions WHERE match_id IN (${placeholders})`, ids);
+  await run(`DELETE FROM notification_log WHERE match_id IN (${placeholders})`, ids);
+  await run(`DELETE FROM matches WHERE id IN (${placeholders})`, ids);
+  return ids.length;
+}
+
 /** Mappe les IDs BSD réels depuis l'API (remplace les anciens IDs API-Football). */
 export async function syncLeagueIds() {
   try {
@@ -63,8 +106,19 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
 
     let count = 0;
     const toImport = events.filter(e => !bsd.isReplacedEvent(e));
-    const normalized = dedupeBsdEvents(toImport, competitionId, normalizeWithOverrides)
+    let normalized = dedupeBsdEvents(toImport, competitionId, normalizeWithOverrides)
       .filter(norm => isChampionsLeagueMainEvent(compCode, norm.round_name, norm.kickoff_at, seasonLabel));
+
+    let roster = null;
+    if (!isCupCompetition(compCode)) {
+      roster = await loadLeagueRoster(bsdLeagueId, seasonLabel);
+      if (roster) {
+        normalized = normalized.filter(n => matchInRoster(
+          n.home_team_name, n.away_team_name, n.home_bsd_team_id, n.away_bsd_team_id, roster
+        ));
+      }
+    }
+
     for (const norm of normalized) {
       const matchSeason = bsd.seasonLabelFromKickoff(norm.kickoff_at);
       await run(
@@ -117,6 +171,13 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
             [competitionId, seasonLabel, `${startYear}-09-01`]
           );
         }
+      }
+    }
+
+    if (roster) {
+      const purged = await purgeMatchesOutsideRoster(competitionId, seasonLabel, roster);
+      if (purged > 0) {
+        await logSync('fixtures', 'ok', `${purged} match(s) hors effectif retirés ligue ${bsdLeagueId}`);
       }
     }
 
