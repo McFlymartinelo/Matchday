@@ -31,10 +31,11 @@ function matchInRoster(homeName, awayName, homeId, awayId, roster) {
 
 async function purgeMatchesOutsideRoster(competitionId, seasonLabel, roster) {
   if (!roster) return 0;
+  // Toute saison : les orphelins D2/coupe restent sinon après un mauvais mapping.
   const rows = await all(
-    `SELECT id, home_team_name, away_team_name, home_bsd_team_id, away_bsd_team_id
-     FROM matches WHERE competition_id = ? AND season = ?`,
-    [competitionId, seasonLabel]
+    `SELECT id, home_team_name, away_team_name, home_bsd_team_id, away_bsd_team_id, season
+     FROM matches WHERE competition_id = ?`,
+    [competitionId]
   );
   const ids = rows
     .filter(m => !matchInRoster(m.home_team_name, m.away_team_name, m.home_bsd_team_id, m.away_bsd_team_id, roster))
@@ -53,17 +54,54 @@ async function purgeMatchesOutsideRoster(competitionId, seasonLabel, roster) {
   return ids.length;
 }
 
+/** Retire les matchs absents du dernier import BSD (ex. D2 importée sous le mauvais league_id). */
+async function purgeStaleFixtures(competitionId, seasonLabel, importedEventIds) {
+  if (!importedEventIds?.size) return 0;
+  const rows = await all(
+    `SELECT id, bsd_event_id FROM matches
+     WHERE competition_id = ? AND season = ? AND bsd_event_id IS NOT NULL AND bsd_event_id > 0`,
+    [competitionId, seasonLabel]
+  );
+  const ids = rows
+    .filter(r => !importedEventIds.has(Number(r.bsd_event_id)))
+    .map(r => r.id);
+  if (!ids.length) return 0;
+  const placeholders = ids.map(() => '?').join(',');
+  await run(
+    `DELETE FROM prediction_reactions WHERE prediction_id IN (
+       SELECT id FROM predictions WHERE match_id IN (${placeholders})
+     )`,
+    ids
+  );
+  await run(`DELETE FROM predictions WHERE match_id IN (${placeholders})`, ids);
+  await run(`DELETE FROM notification_log WHERE match_id IN (${placeholders})`, ids);
+  await run(`DELETE FROM matches WHERE id IN (${placeholders})`, ids);
+  return ids.length;
+}
+
 /** Mappe les IDs BSD réels depuis l'API (remplace les anciens IDs API-Football). */
 export async function syncLeagueIds() {
   try {
     const leagues = await bsd.getAllLeagues();
+    const details = [];
     for (const [code, rule] of Object.entries(BSD_LEAGUE_MAPPING)) {
+      const prev = await get('SELECT id, bsd_league_id FROM competitions WHERE code = ?', [code]);
       const found = pickBsdLeague(leagues, rule);
-      if (found) {
-        await run('UPDATE competitions SET bsd_league_id = ? WHERE code = ?', [found.id, code]);
+      if (!found) {
+        details.push(`${code}: aucun match BSD`);
+        continue;
+      }
+      await run('UPDATE competitions SET bsd_league_id = ? WHERE code = ?', [found.id, code]);
+      const changed = prev && Number(prev.bsd_league_id) !== Number(found.id);
+      if (changed && prev?.id) {
+        await run('DELETE FROM official_standings WHERE competition_id = ?', [prev.id]);
+        details.push(`${code}: ${prev.bsd_league_id}→${found.id} (${found.name})`);
+      } else {
+        details.push(`${code}=${found.id} (${found.name})`);
       }
     }
-    await logSync('league_ids', 'ok', `${leagues.length} ligues BSD consultées`);
+    await logSync('league_ids', 'ok', details.join(' · '));
+    console.log('Sync league IDs:', details.join(' · '));
   } catch (err) {
     await logSync('league_ids', 'error', err.message);
     throw err;
@@ -138,6 +176,8 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
       count++;
     }
 
+    const importedEventIds = new Set(normalized.map(n => Number(n.bsd_event_id)).filter(Boolean));
+
     if (count > 0) {
       const merged = await dedupeCompetitionMatches(competitionId);
       if (merged > 0) {
@@ -178,6 +218,11 @@ export async function syncFixtures(competitionId, bsdLeagueId) {
       const purged = await purgeMatchesOutsideRoster(competitionId, seasonLabel, roster);
       if (purged > 0) {
         await logSync('fixtures', 'ok', `${purged} match(s) hors effectif retirés ligue ${bsdLeagueId}`);
+      }
+    } else if (!isCupCompetition(compCode) && importedEventIds.size) {
+      const stale = await purgeStaleFixtures(competitionId, seasonLabel, importedEventIds);
+      if (stale > 0) {
+        await logSync('fixtures', 'ok', `${stale} match(s) stale retirés ligue ${bsdLeagueId}`);
       }
     }
 

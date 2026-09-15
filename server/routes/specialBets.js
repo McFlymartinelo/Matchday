@@ -8,6 +8,10 @@ import { isChampionBetOpen } from '../lib/competitions.js';
 
 const router = Router();
 
+const COMP_ORDER = `CASE c.code
+  WHEN 'L1' THEN 1 WHEN 'PL' THEN 2 WHEN 'PD' THEN 3
+  WHEN 'SA' THEN 4 WHEN 'BL1' THEN 5 WHEN 'LDC' THEN 6 ELSE 9 END`;
+
 router.get('/:groupId/special-bets', authRequired, groupMemberRequired, async (req, res) => {
   const rows = await all(
     'SELECT * FROM special_bets WHERE group_id = ? AND user_id = ?',
@@ -21,6 +25,65 @@ router.get('/:groupId/special-bets', authRequired, groupMemberRequired, async (r
     points: r.points,
     season: r.season,
   })));
+});
+
+router.get('/:groupId/special-bets/group', authRequired, groupMemberRequired, async (req, res) => {
+  const comps = await all(
+    `SELECT c.id, c.code, c.nom, c.emoji, c.logo, c.couleur, c.couleur_bg, c.saison_active
+     FROM competitions c
+     JOIN group_competitions gc ON gc.competition_id = c.id
+     WHERE gc.group_id = ?
+     ORDER BY ${COMP_ORDER}, c.nom`,
+    [req.groupId]
+  );
+  const members = await all(
+    `SELECT u.id, u.display_name, u.avatar, u.profile_color
+     FROM users u
+     JOIN group_members gm ON gm.user_id = u.id
+     WHERE gm.group_id = ?
+     ORDER BY CASE WHEN u.id = ? THEN 0 ELSE 1 END, u.display_name COLLATE NOCASE`,
+    [req.groupId, req.user.id]
+  );
+  const bets = await all(
+    `SELECT sb.user_id, sb.competition_id, sb.bet_value, sb.points, sb.season
+     FROM special_bets sb
+     JOIN competitions c ON c.id = sb.competition_id
+     JOIN group_competitions gc ON gc.competition_id = c.id AND gc.group_id = sb.group_id
+     WHERE sb.group_id = ? AND sb.bet_type = 'champion' AND sb.season = c.saison_active`,
+    [req.groupId]
+  );
+
+  const competitions = comps.map(c => ({
+    id: c.id,
+    code: c.code,
+    nom: c.nom,
+    emoji: c.emoji,
+    logo: c.logo,
+    couleur: c.couleur,
+    couleurBg: c.couleur_bg,
+    season: c.saison_active,
+    revealed: !isChampionBetOpen(c.code),
+  }));
+  const revealedIds = new Set(competitions.filter(c => c.revealed).map(c => c.id));
+
+  res.json({
+    competitions,
+    members: members.map(u => ({
+      userId: u.id,
+      displayName: u.display_name,
+      avatar: u.avatar,
+      profileColor: u.profile_color,
+    })),
+    bets: bets
+      .filter(b => revealedIds.has(b.competition_id) || b.user_id === req.user.id)
+      .map(b => ({
+        userId: b.user_id,
+        competitionId: b.competition_id,
+        betValue: b.bet_value,
+        points: b.points,
+        season: b.season,
+      })),
+  });
 });
 
 router.get('/:groupId/special-bets/teams/:competitionId', authRequired, groupMemberRequired, async (req, res) => {

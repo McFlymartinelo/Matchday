@@ -1,5 +1,6 @@
 import { all } from '../db/connection.js';
 import { withRanks } from './scoring.js';
+import { RANKED_MEMBERS_WHERE } from './standingsVisibility.js';
 
 const ACTIVE_SEASON_MATCH = `m.season = (SELECT saison_active FROM competitions WHERE id = m.competition_id)`;
 const ACTIVE_SEASON_XI = `sx.season = (SELECT saison_active FROM competitions WHERE id = sx.competition_id)`;
@@ -143,6 +144,7 @@ export async function buildRankingHistory(groupId, { competitionId } = {}) {
     `SELECT u.id, u.display_name, u.avatar, u.profile_color
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
+     WHERE ${RANKED_MEMBERS_WHERE}
      ORDER BY u.display_name COLLATE NOCASE`,
     [groupId]
   )).map(toParticipant);

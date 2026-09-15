@@ -1,0 +1,23 @@
+---
+description: Graphify existe déjà — ne jamais le déclarer absent via Glob (dossier gitignoré)
+alwaysApply: true
+---
+
+# Graphify detection
+
+`graphify-out/` is gitignored. **Glob returns 0 files even when the graph is on disk.** That is a false negative.
+
+## Check existence
+
+Do **not** use Glob on `graphify-out/**`. Open the known paths with Read or `Test-Path`:
+
+- Live graph: `graphify-out/graph.json`
+- Report: `graphify-out/GRAPH_REPORT.md`
+- Dated folders (`graphify-out/2026-09-08/`, etc.) are snapshots, not the file to query
+
+```
+❌ Glob graphify-out/** → 0 files → "le graphe n'est pas là"
+✅ Read graphify-out/graph.json → if it opens, the graph exists
+```
+
+If Read fails with not-found, then the graph is actually missing. Otherwise query it (`graphify query`, or NetworkX on `graph.json`) before grepping the repo.

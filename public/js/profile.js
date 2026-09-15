@@ -203,7 +203,7 @@ export async function renderProfile(el, state, renderApp) {
 
           <div class="profile-hint">Clique sur ton pseudo pour le modifier</div>
 
-          <div class="profile-role-pill">joueur</div>
+          <div class="profile-role-pill">${bilan.excludeFromStandings ? 'observateur' : 'joueur'}</div>
 
         </div>
 
@@ -221,9 +221,9 @@ export async function renderProfile(el, state, renderApp) {
 
         <div class="bilan-stat">
 
-          <div class="bilan-value">#${bilan.rank} <span class="bilan-sub">/ ${bilan.memberCount}</span></div>
+          <div class="bilan-value">${bilan.excludeFromStandings ? '—' : `#${bilan.rank} <span class="bilan-sub">/ ${bilan.memberCount}</span>`}</div>
 
-          <div class="bilan-label">Classement</div>
+          <div class="bilan-label">${bilan.excludeFromStandings ? 'Observateur' : 'Classement'}</div>
 
         </div>
 
@@ -693,7 +693,7 @@ export async function renderProfile(el, state, renderApp) {
 
 
 const CHAMPION_BETS_DEADLINE = new Date('2026-09-04T00:00:00');
-const LDC_CHAMPION_BETS_DEADLINE = new Date('2026-09-08T18:00:00');
+const LDC_CHAMPION_BETS_DEADLINE = new Date('2026-09-20T23:59:00');
 
 function isCompChampionBetLocked(comp) {
   const deadline = String(comp?.code ?? '').toUpperCase() === 'LDC'
@@ -720,7 +720,7 @@ async function mountChampionBets(state, bets) {
     if (!anyOpen) {
       desc.innerHTML = '<span class="champion-bet-lock-badge">🔒 Pronos verrouillés</span> — Bon vainqueur = <strong>+5 pts</strong> en fin de saison.';
     } else if (ldcOpen) {
-      desc.innerHTML = `Choisis le futur champion et le <strong>vainqueur de LDC</strong>. Bon vainqueur = <strong>+5 pts</strong>. <span class="champion-bet-deadline">LDC ouverte jusqu’au 8 septembre.</span>`;
+      desc.innerHTML = `Choisis le futur champion et le <strong>vainqueur de LDC</strong>. Bon vainqueur = <strong>+5 pts</strong>. <span class="champion-bet-deadline">LDC ouverte jusqu’au dimanche 20 septembre au soir.</span>`;
     } else {
       desc.innerHTML = `Choisis le futur champion pour chaque compétition suivie. Bon vainqueur = <strong>+5 pts</strong> en fin de saison.`;
     }

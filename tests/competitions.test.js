@@ -21,7 +21,9 @@ describe('competitions helpers', () => {
     const afterDomestic = new Date('2026-09-06T12:00:00');
     assert.equal(isChampionBetOpen('L1', { now: afterDomestic }), false);
     assert.equal(isChampionBetOpen('LDC', { now: afterDomestic }), true);
-    assert.equal(isChampionBetOpen('LDC', { now: new Date('2026-09-08T18:00:00') }), false);
+    assert.equal(isChampionBetOpen('LDC', { now: new Date('2026-09-08T18:00:00') }), true);
+    assert.equal(isChampionBetOpen('LDC', { now: new Date('2026-09-20T23:58:00') }), true);
+    assert.equal(isChampionBetOpen('LDC', { now: new Date('2026-09-20T23:59:00') }), false);
     assert.ok(CHAMPION_BETS_DEADLINE < LDC_CHAMPION_BETS_DEADLINE);
   });
 
@@ -59,6 +61,14 @@ describe('competitions helpers', () => {
     ];
     const found = pickBsdLeague(leagues, BSD_LEAGUE_MAPPING.BL1);
     assert.equal(found?.id, 1);
+  });
+
+  it('accepte le pays Deutschland pour la Bundesliga', () => {
+    const leagues = [
+      { id: 2, name: '2. Bundesliga', country: 'Deutschland', is_women: false },
+      { id: 1, name: 'Bundesliga', country: 'Deutschland', is_women: false },
+    ];
+    assert.equal(pickBsdLeague(leagues, BSD_LEAGUE_MAPPING.BL1)?.id, 1);
   });
 
   it('ne retombe pas sur la 2. Bundesliga si la D1 est absente', () => {

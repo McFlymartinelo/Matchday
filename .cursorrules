@@ -11,6 +11,10 @@
 - Gestion d'erreurs explicite côté API et Node.js.
 - Priorité à la lisibilité et à l'architecture modulaire.
 
+## Graphify detection
+
+`graphify-out/` is gitignored. Never conclude the graph is missing from a Glob of `graphify-out/**` (always empty). Open `graphify-out/graph.json` with Read / `Test-Path`. Dated snapshot folders are not the live graph.
+
 ## Graphify Context Reduction Mode
 
 When analyzing or reading large codebases, files, or documentation:

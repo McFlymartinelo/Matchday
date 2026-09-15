@@ -2,7 +2,7 @@
 export const CUP_CODES = new Set(['LDC']);
 
 export const CHAMPION_BETS_DEADLINE = new Date('2026-09-04T00:00:00');
-export const LDC_CHAMPION_BETS_DEADLINE = new Date('2026-09-08T18:00:00');
+export const LDC_CHAMPION_BETS_DEADLINE = new Date('2026-09-20T23:59:00');
 
 export const LDC_LEAGUE_PHASE_MAX_MD = 8;
 
@@ -46,11 +46,41 @@ export function isChampionsLeagueMainEvent(code, roundName, kickoffAt, seasonLab
   return true;
 }
 
+const COUNTRY_ALIASES = {
+  germany: ['germany', 'deutschland', 'de', 'ger'],
+  france: ['france', 'fr', 'fra'],
+  england: ['england', 'uk', 'gb', 'gbr', 'united kingdom'],
+  spain: ['spain', 'españa', 'espana', 'es', 'esp'],
+  italy: ['italy', 'italia', 'it', 'ita'],
+};
+
+function countryMatches(leagueCountry, ruleCountry) {
+  const hay = String(leagueCountry ?? '').toLowerCase();
+  const needle = String(ruleCountry ?? '').toLowerCase();
+  if (!needle) return true;
+  if (hay.includes(needle) || needle.includes(hay)) return true;
+  const aliases = COUNTRY_ALIASES[needle] ?? [needle];
+  return aliases.some(a => hay.includes(a));
+}
+
+/** D2 / D3 / coupes nationales — jamais la D1. */
+export function isSecondaryDomesticLeague(name) {
+  const n = String(name ?? '').toLowerCase().trim();
+  if (!n) return false;
+  if (/^[23](\.|nd|rd)?\b/.test(n)) return true;
+  if (/\b(2\.?\s*bundesliga|bundesliga\s*2|zweite)\b/.test(n)) return true;
+  if (/\b(3\.?\s*liga|liga\s*3)\b/.test(n)) return true;
+  if (/\b(championship|league\s*one|league\s*two)\b/.test(n)) return true;
+  if (/\b(ligue\s*2|serie\s*[bc]|segunda|hypermotion|laliga\s*2)\b/.test(n)) return true;
+  return false;
+}
+
 export function matchesBsdLeagueRule(league, rule) {
   if (!league || league.is_women) return false;
   const name = String(league.name ?? '').toLowerCase();
   const compact = name.replace(/[\s.-]/g, '');
   const country = String(league.country ?? '').toLowerCase();
+  if (isSecondaryDomesticLeague(name)) return false;
   if (rule.exclude?.some(x => {
     const needle = x.toLowerCase();
     return name.includes(needle) || compact.includes(needle.replace(/[\s.-]/g, ''));
@@ -62,7 +92,7 @@ export function matchesBsdLeagueRule(league, rule) {
   if (!nameMatch) return false;
   if (!rule.country) return true;
   const countries = Array.isArray(rule.country) ? rule.country : [rule.country];
-  return countries.some(c => !c || country.includes(c));
+  return countries.some(c => countryMatches(country, c));
 }
 
 function bsdLeagueScore(league, rule) {
@@ -70,8 +100,8 @@ function bsdLeagueScore(league, rule) {
   let score = 0;
   if (name.includes('uefa')) score += 1000;
   if ((rule.names ?? []).some(n => name === n.toLowerCase())) score += 500;
-  if (/^[23](\.|nd|rd)?\b/.test(name)) score -= 800;
-  if (/\b(2|ii|zweite|segunda)\b/.test(name)) score -= 400;
+  if (/^1(\.|st)?\b/.test(name)) score += 200;
+  if (isSecondaryDomesticLeague(name)) score -= 2000;
   return score - name.length;
 }
 

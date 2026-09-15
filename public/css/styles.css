@@ -2473,3 +2473,119 @@ html[data-theme="dark"] .md-cell-label { background: var(--card); }
 html[data-theme="dark"] .podium-step-1 {
   background: color-mix(in srgb, var(--podium-bg, var(--l1-bg)) 35%, var(--card-soft));
 }
+
+/* Tabs classement — 5 onglets */
+.tabs { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 1 0 auto; white-space: nowrap; padding: 10px 12px; }
+
+/* Pronos vainqueur du groupe */
+.winners-lock {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700;
+  background: var(--card-soft); color: var(--ink-soft);
+  padding: 3px 10px; border-radius: 999px;
+}
+.winners-lock-icon { flex-shrink: 0; }
+.winners-favs { display: flex; flex-direction: column; gap: 2px; }
+.winners-fav {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 8px 6px;
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.winners-fav:hover { background: var(--card-soft); }
+.winners-fav.is-on { background: var(--card-soft); border-color: var(--border-soft); }
+.winners-fav-code { font-size: 11px; font-weight: 800; }
+.winners-fav-main { min-width: 0; }
+.winners-bar-track {
+  display: block; height: 8px; border-radius: 999px;
+  background: var(--border-soft); overflow: hidden;
+}
+.winners-bar { display: block; height: 100%; border-radius: 999px; }
+.winners-fav-meta {
+  display: block; margin-top: 4px;
+  font-size: 11px; font-weight: 700; color: var(--ink-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.winners-fav-n { font-size: 12px; font-weight: 800; white-space: nowrap; }
+.winners-detail {
+  background: var(--card-soft);
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 12px; font-weight: 600; color: var(--ink-soft);
+}
+.winners-detail strong { color: var(--ink); font-weight: 800; }
+.winners-detail-group { margin-top: 8px; }
+.winners-detail-people {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+}
+.winners-person {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; color: var(--ink);
+}
+.winners-slip {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: start;
+  padding: 10px 0;
+}
+.winners-slip + .winners-slip { border-top: 1px solid var(--border-soft); }
+.winners-slip.is-me {
+  margin: 0 -8px; padding-left: 8px; padding-right: 8px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--pl-bg) 70%, transparent);
+}
+.winners-slip-av { padding-top: 2px; }
+.winners-slip-name {
+  font-size: 13px; font-weight: 800;
+  display: flex; align-items: center; gap: 6px;
+}
+.winners-you {
+  font-size: 10px; font-weight: 800; color: var(--pl);
+  background: var(--pl-bg); border-radius: 999px; padding: 1px 6px;
+}
+.winners-picks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  grid-column: 2;
+}
+.winners-pick {
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0;
+  background: var(--card-soft);
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  padding: 6px 7px;
+}
+.winners-pick.is-on { border-color: var(--pick-c, var(--pl)); }
+.winners-pick.is-empty { opacity: 0.7; }
+.winners-pick-code {
+  font-size: 9px; font-weight: 800; color: var(--ink-soft);
+  width: 22px; flex-shrink: 0;
+}
+.winners-pick-team {
+  font-size: 11px; font-weight: 800;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+.winners-pick-pts {
+  margin-left: auto;
+  font-size: 9px; font-weight: 800; color: var(--l1);
+  flex-shrink: 0;
+}
+@media (max-width: 360px) {
+  .winners-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

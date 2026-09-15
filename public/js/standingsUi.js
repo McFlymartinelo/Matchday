@@ -1,4 +1,4 @@
-import { standings, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml } from './api.js?v=63';
+import { standings, specialBets, groups, compColors, compLogoHtml, compId, sameCompId, findCompetition, loadSavedCompId, saveCompId, escapeHtml, normTeamName } from './api.js?v=64';
 import { renderAvatarHtml, clubCrestLetters } from './avatars.js';
 import { mountRankingChart } from './rankingChart.js?v=65';
 
@@ -314,12 +314,180 @@ async function renderByCompTab(body, state) {
   });
 }
 
+function compChipLabel(code) {
+  const map = { L1: 'L1', PL: 'PL', PD: 'Liga', SA: 'SA', BL1: 'BL', LDC: 'LDC' };
+  return map[String(code ?? '').toUpperCase()] ?? String(code ?? '');
+}
+
+function shortClubLabel(name, shortByNorm) {
+  const raw = String(name ?? '').trim();
+  if (!raw) return '';
+  const short = shortByNorm.get(normTeamName(raw));
+  return short || raw;
+}
+
+function winnersLockSvg() {
+  return `<svg class="winners-lock-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2"/></svg>`;
+}
+
+function pickGroupsForComp(members, bets, competitionId, revealed, currentUserId) {
+  const byUser = new Map();
+  for (const b of bets) {
+    if (sameCompId(b.competitionId, competitionId)) byUser.set(b.userId, b);
+  }
+  const groupsMap = new Map();
+  for (const m of members) {
+    const bet = byUser.get(m.userId);
+    const canSee = revealed || m.userId === currentUserId;
+    const team = canSee ? (bet?.betValue ?? '') : null;
+    const key = team === null ? '__hidden' : team;
+    if (!groupsMap.has(key)) groupsMap.set(key, { team, hidden: team === null, members: [], pointsByUser: new Map() });
+    const g = groupsMap.get(key);
+    g.members.push(m);
+    if (bet?.points) g.pointsByUser.set(m.userId, bet.points);
+  }
+  return [...groupsMap.values()].sort((a, b) => {
+    if (a.hidden !== b.hidden) return a.hidden ? 1 : -1;
+    if (!a.team && b.team) return 1;
+    if (a.team && !b.team) return -1;
+    return b.members.length - a.members.length || String(a.team).localeCompare(String(b.team), 'fr');
+  });
+}
+
+function winnersAvatar(m, size = 'sm') {
+  return renderAvatarHtml(m.avatar, m.displayName, m.profileColor, size);
+}
+
+function paintWinnersTab(body, state, payload, shortByNorm) {
+  const { competitions, members, bets } = payload;
+  const currentUserId = state.user.id;
+  const selectedId = compId(state.winnersCompId);
+  const selected = findCompetition(competitions, selectedId);
+
+  if (!competitions.length) {
+    body.innerHTML = `<div class="section-card"><div class="empty-state">Aucun championnat suivi par ce groupe.</div></div>`;
+    return;
+  }
+
+  const favRows = competitions.map(c => {
+    const cc = compColors(c.code);
+    const revealed = !!c.revealed;
+    const ranked = pickGroupsForComp(members, bets, c.id, revealed, currentUserId);
+    const lead = revealed ? ranked.find(g => g.team) : null;
+    const pct = lead ? Math.round((lead.members.length / members.length) * 100) : 0;
+    const on = sameCompId(c.id, selectedId);
+    const meta = !revealed
+      ? 'Pas encore révélés'
+      : (lead?.team ? escapeHtml(shortClubLabel(lead.team, shortByNorm)) : 'Pas de prono');
+    const n = revealed && lead ? `${lead.members.length}/${members.length}` : '—';
+    return `<button type="button" class="winners-fav${on ? ' is-on' : ''}" data-winners-comp="${c.id}" aria-pressed="${on}">
+      <span class="winners-fav-code" style="color:${cc.color}">${escapeHtml(compChipLabel(c.code))}</span>
+      <span class="winners-fav-main">
+        <span class="winners-bar-track"><span class="winners-bar" style="width:${pct}%;background:${cc.color}"></span></span>
+        <span class="winners-fav-meta">${meta}</span>
+      </span>
+      <span class="winners-fav-n">${n}</span>
+    </button>`;
+  }).join('');
+
+  let detailHtml = '';
+  if (selected) {
+    const revealed = !!selected.revealed;
+    const ranked = pickGroupsForComp(members, bets, selected.id, revealed, currentUserId);
+    if (!revealed) {
+      const mine = ranked.find(g => g.members.some(m => m.userId === currentUserId));
+      const mineLabel = mine?.team ? escapeHtml(shortClubLabel(mine.team, shortByNorm)) : 'Pas de prono';
+      detailHtml = `<div class="winners-detail">
+        <strong>${escapeHtml(selected.nom)}</strong> — les pronos du groupe seront visibles après le verrouillage.
+        <div class="winners-detail-people"><span class="winners-person">${winnersAvatar(members.find(m => m.userId === currentUserId) ?? { displayName: state.user.displayName, avatar: state.user.avatar, profileColor: state.user.profileColor })} Ton prono : ${mineLabel}</span></div>
+      </div>`;
+    } else {
+      detailHtml = `<div class="winners-detail">
+        <strong>${escapeHtml(selected.nom)}</strong> — répartition du groupe
+        ${ranked.map(g => {
+          const label = g.hidden ? 'Caché' : (g.team ? escapeHtml(shortClubLabel(g.team, shortByNorm)) : 'Pas de prono');
+          const people = g.members.map(m => `<span class="winners-person">${winnersAvatar(m)} ${escapeHtml(m.displayName)}${m.userId === currentUserId ? ' (toi)' : ''}</span>`).join('');
+          return `<div class="winners-detail-group"><strong>${label}</strong> · ${g.members.length}<div class="winners-detail-people">${people}</div></div>`;
+        }).join('')}
+      </div>`;
+    }
+  }
+
+  const slips = members.map(m => {
+    const isMe = m.userId === currentUserId;
+    const picks = competitions.map(c => {
+      const cc = compColors(c.code);
+      const ranked = pickGroupsForComp([m], bets, c.id, !!c.revealed, currentUserId);
+      const g = ranked[0];
+      const canSee = c.revealed || isMe;
+      const team = canSee ? (g?.team ?? '') : '';
+      const empty = !team;
+      const on = sameCompId(c.id, selectedId);
+      const label = !canSee ? '…' : (team ? escapeHtml(shortClubLabel(team, shortByNorm)) : '—');
+      const pts = canSee && g?.pointsByUser.get(m.userId) ? `<span class="winners-pick-pts">+${g.pointsByUser.get(m.userId)}</span>` : '';
+      return `<div class="winners-pick${on ? ' is-on' : ''}${empty ? ' is-empty' : ''}" style="--pick-c:${cc.color}">
+        <span class="winners-pick-code">${escapeHtml(compChipLabel(c.code))}</span>
+        <span class="winners-pick-team">${label}</span>
+        ${pts}
+      </div>`;
+    }).join('');
+    return `<div class="winners-slip${isMe ? ' is-me' : ''}">
+      <div class="winners-slip-av">${winnersAvatar(m)}</div>
+      <div class="winners-slip-name">${escapeHtml(m.displayName)}${isMe ? '<span class="winners-you">Toi</span>' : ''}</div>
+      <div class="winners-picks">${picks}</div>
+    </div>`;
+  }).join('');
+
+  const allLocked = competitions.every(c => c.revealed);
+  body.innerHTML = `
+    <div class="section-card">
+      <div class="section-head">
+        <div class="jn">Favoris du groupe</div>
+        <span class="winners-lock">${winnersLockSvg()} ${allLocked ? 'Verrouillés' : 'En cours'}</span>
+      </div>
+      <p class="profile-desc">Club le plus cité par compétition. Touche une ligne pour voir qui a choisi quoi.</p>
+      <div class="winners-favs">${favRows}</div>
+    </div>
+    <div class="section-card">
+      <div class="section-head">
+        <div class="jn">Bulletins</div>
+        <span class="winners-lock">+5 pts / bon vainqueur</span>
+      </div>
+      ${detailHtml}
+      ${slips || '<div class="empty-state">Aucun membre dans ce groupe.</div>'}
+    </div>`;
+
+  body.querySelectorAll('[data-winners-comp]').forEach(btn => {
+    btn.onclick = () => {
+      const id = compId(btn.dataset.winnersComp);
+      state.winnersCompId = sameCompId(id, state.winnersCompId) ? null : id;
+      paintWinnersTab(body, state, payload, shortByNorm);
+    };
+  });
+}
+
+async function renderWinnersTab(body, state) {
+  const data = await specialBets.group(state.group.id);
+  if (state.standingsTab !== 'winners') return;
+  paintWinnersTab(body, state, data, new Map());
+  try {
+    const clubs = await groups.clubs(state.group.id);
+    if (state.standingsTab !== 'winners') return;
+    const shortByNorm = new Map();
+    for (const t of clubs) {
+      if (t.team_name && t.short_name) shortByNorm.set(normTeamName(t.team_name), t.short_name);
+    }
+    if (shortByNorm.size) paintWinnersTab(body, state, data, shortByNorm);
+  } catch { /* noms complets */ }
+}
+
 export async function renderStandingsScreen(el, state) {
   el.innerHTML = `<div class="tabs">
     <button class="tab ${state.standingsTab === 'general' ? 'active' : ''}" data-tab="general">Général</button>
     <button class="tab ${state.standingsTab === 'byComp' ? 'active' : ''}" data-tab="byComp">Par championnat</button>
     <button class="tab ${state.standingsTab === 'stats' ? 'active' : ''}" data-tab="stats">Stats</button>
     <button class="tab ${state.standingsTab === 'duel' ? 'active' : ''}" data-tab="duel">Duel</button>
+    <button class="tab ${state.standingsTab === 'winners' ? 'active' : ''}" data-tab="winners">Vainqueurs</button>
   </div><div id="standings-body"></div>`;
 
   el.querySelectorAll('[data-tab]').forEach(btn => {
@@ -343,6 +511,8 @@ export async function renderStandingsScreen(el, state) {
       await renderStatsTab(body, state);
     } else if (state.standingsTab === 'duel') {
       await renderDuelTab(body, state);
+    } else if (state.standingsTab === 'winners') {
+      await renderWinnersTab(body, state);
     }
   } catch (err) {
     body.innerHTML = `<div class="empty-state">${err.message || 'Erreur de chargement'}</div>`;

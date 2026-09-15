@@ -7,6 +7,7 @@ import { withRanks } from '../lib/scoring.js';
 import { buildRankingHistory, accumulateHistory, buildPointsByRound } from '../lib/rankingHistory.js';
 import { attachFormToStandings } from '../lib/teamForm.js';
 import { normalizeTeamName } from '../services/bsd.js';
+import { RANKED_MEMBERS_WHERE, isStandingsObserver } from '../lib/standingsVisibility.js';
 
 const router = Router();
 
@@ -70,6 +71,7 @@ router.get('/:groupId/standings', authRequired, groupMemberRequired, async (req,
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
      ${scoredPredictionsJoin(matchFilter, req.groupId)}
+     WHERE ${RANKED_MEMBERS_WHERE}
      GROUP BY u.id`,
     [req.groupId, ...matchParams, req.groupId]
   );
@@ -133,7 +135,7 @@ router.get('/:groupId/standings/matchday/:matchday', authRequired, groupMemberRe
                AND m.status IN ${FINISHED_STATUSES}`;
   const params = [req.groupId, req.groupId, matchday];
   if (competitionId) { sql += ' AND m.competition_id = ?'; params.push(Number(competitionId)); }
-  sql += ' GROUP BY u.id';
+  sql += ` WHERE ${RANKED_MEMBERS_WHERE} GROUP BY u.id`;
 
   const rows = await all(sql, params);
   res.json(withRanks(rows.map((r) => ({
@@ -301,6 +303,7 @@ router.get('/:groupId/analytics', authRequired, groupMemberRequired, async (req,
      FROM users u
      JOIN group_members gm ON gm.user_id = u.id AND gm.group_id = ?
      ${scoredPredictionsJoin(compFilter, req.groupId)}
+     WHERE ${RANKED_MEMBERS_WHERE}
      GROUP BY u.id`,
     [req.groupId, ...compParams, req.groupId]
   );
@@ -456,7 +459,10 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
     .map(r => r.competition_id);
 
   const memberCount = (await get(
-    'SELECT COUNT(*) as n FROM group_members WHERE group_id = ?', [req.groupId]
+    `SELECT COUNT(*) as n FROM group_members gm
+     JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id = ? AND ${RANKED_MEMBERS_WHERE}`,
+    [req.groupId]
   ))?.n ?? 0;
 
   const compFilter = compIds.length
@@ -515,6 +521,7 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
        SELECT user_id, SUM(points) as special_pts FROM special_bets sb
        WHERE group_id = ? AND ${ACTIVE_SEASON_SPECIAL} GROUP BY user_id
      ) sp ON sp.user_id = u.id
+     WHERE ${RANKED_MEMBERS_WHERE}
      GROUP BY u.id`,
     [req.groupId, ...compParams, req.groupId, req.groupId, req.groupId]
   );
@@ -527,6 +534,9 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
     diffCount: Number(r.diff_count),
     winnerCount: Number(r.winner_count),
   })));
+  const meUser = await get('SELECT username FROM users WHERE id = ?', [userId]);
+  const groupRow = await get('SELECT name FROM groups WHERE id = ?', [req.groupId]);
+  const excludeFromStandings = isStandingsObserver(meUser?.username, groupRow?.name);
   const rank = ranked.find((r) => Number(r.userId) === Number(userId))?.rank ?? Number(memberCount);
   const predPoints = Number(predStats?.pred_points ?? 0);
   const totalPoints = predPoints + Number(xiPoints) + Number(specialPoints);
@@ -541,8 +551,9 @@ router.get('/:groupId/profile', authRequired, groupMemberRequired, async (req, r
   const avgPerMatch = scoredCount > 0 ? (predPoints / scoredCount).toFixed(2) : '0.00';
 
   res.json({
-    rank: rank || memberCount,
+    rank: excludeFromStandings ? null : (rank || memberCount),
     memberCount: Number(memberCount),
+    excludeFromStandings,
     predPoints,
     xiPoints: Number(xiPoints),
     specialPoints: Number(specialPoints),

@@ -99,6 +99,7 @@ export const groups = {
 
 export const specialBets = {
   list: (groupId) => api(`/groups/${groupId}/special-bets`),
+  group: (groupId) => api(`/groups/${groupId}/special-bets/group`),
   teams: (groupId, competitionId) => api(`/groups/${groupId}/special-bets/teams/${competitionId}`),
   save: (groupId, body) => api(`/groups/${groupId}/special-bets`, { method: 'POST', body: JSON.stringify(body) }),
 };
