@@ -132,12 +132,22 @@ export async function sendPushToUser(userId, payload) {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         body,
-        { TTL: 86400, urgency: 'high', topic: 'matchday-reminder' }
+        // Pas de `topic` : Apple (web.push.apple.com) renvoie 400 BadWebPushTopic
+        // dès que le topic dépasse 16 caractères (au lieu des 32 du RFC 8030).
+        { TTL: 86400, urgency: 'high' }
       );
       sent++;
     } catch (err) {
       failed++;
-      errors.push({ endpoint: sub.endpoint.slice(0, 40), status: err.statusCode, message: err.message });
+      let host = '?';
+      try { host = new URL(sub.endpoint).host; } catch { /* ignore */ }
+      errors.push({
+        endpoint: sub.endpoint.slice(0, 40),
+        host,
+        status: err.statusCode,
+        message: err.message,
+        body: typeof err.body === 'string' ? err.body.slice(0, 200) : undefined,
+      });
       if (err.statusCode === 404 || err.statusCode === 410 || err.statusCode === 403) {
         await run('DELETE FROM push_subscriptions WHERE endpoint = ?', [sub.endpoint]);
       }

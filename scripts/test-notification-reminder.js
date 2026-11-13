@@ -221,7 +221,11 @@ for (const r of result.results) {
   console.log(`     Push envoyés: ${push.sent ?? 0}, échecs: ${push.failed ?? 0}`);
   if (push.skipped) console.log(`     (${push.reason})`);
   if (push.errors?.length) {
-    push.errors.forEach(e => console.log(`     ⚠ ${e.status}: ${e.message}`));
+    push.errors.forEach(e => {
+      const where = e.host ? `[${e.host}] ` : '';
+      const body = e.body ? ` — ${e.body}` : '';
+      console.log(`     ⚠ ${where}${e.status}: ${e.message}${body}`);
+    });
   }
 }
 
