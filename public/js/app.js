@@ -7,7 +7,7 @@ import { renderChampionships } from './championships.js?v=56';
 import { renderSeasonXi } from './seasonXi.js';
 import { renderStandingsScreen, compPillsHtml } from './standingsUi.js?v=68';
 import { renderMatches, resetMatchesUi } from './matchesUi.js?v=55';
-import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers, navigateToMatchDeepLink } from './notifications.js?v=3';
+import { syncPushIfEnabled, notificationsEnabled, openNotificationPanel, parseNavFromPayload, stashNotificationDeepLinkFromUrl, consumePendingNav, registerPushHandlers, navigateToMatchDeepLink } from './notifications.js?v=4';
 import { startMatchReminders, stopMatchReminders, handlePushPayload } from './reminders.js';
 import { renderAuthScreen, renderPublicGroupOptions, formatMemberCount } from './authUi.js?v=5';
 

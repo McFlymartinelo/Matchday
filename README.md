@@ -152,6 +152,16 @@ docker compose exec matchday npm run test:notifications -- --send --username mar
 
 Le script crée un match fictif (PSG–OM) dans ~60 min sans pronostic, envoie le push, puis supprime le match (ajoute `--keep` pour le garder).
 
+### iPhone / Safari
+
+Apple ne permet les notifications push **que dans une PWA installée sur l’écran d’accueil** (iOS 16.4+). Dans un onglet Safari, `PushManager` n’existe pas : aucune page web ne peut s’y abonner.
+
+1. Ouvrir le site dans **Safari** (pas un navigateur intégré à une app).
+2. Bouton **Partager** → **Sur l’écran d’accueil**.
+3. Ouvrir **Matchday depuis l’icône**, se connecter, puis cliquer la cloche 🔔 → **Activer**.
+
+La cloche affiche un diagnostic (« Contexte : iOS x.y · navigateur/écran d’accueil · HTTPS · Push API … ») et explique la cause exacte si l’activation est impossible (Safari non installé, iOS < 16.4, HTTP au lieu de HTTPS…).
+
 ---
 
 ## Scripts d'administration

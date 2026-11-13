@@ -127,18 +127,71 @@ export function isStandaloneDisplay() {
     || window.navigator.standalone === true;
 }
 
-/** iOS n’expose Push/Notification que dans la PWA écran d’accueil. */
+function parseIosVersion() {
+  const m = navigator.userAgent.match(/OS (\d+)[_.](\d+)/);
+  if (!m) return null;
+  return { major: Number(m[1]), minor: Number(m[2]) };
+}
+
+export function formatIosVersion(version) {
+  return version ? `${version.major}.${version.minor}` : null;
+}
+
+/**
+ * Pourquoi le push est disponible ou non.
+ * - `ok` : on peut s’abonner
+ * - `ios-needs-install` : Safari iPhone hors PWA (Apple n’expose pas PushManager)
+ * - `ios-outdated` : PWA iPhone mais iOS < 16.4
+ * - `insecure` : pas de HTTPS (PushManager absent)
+ * - `unsupported` : navigateur sans Push/Notification
+ */
 export function detectPushContext() {
+  const ios = isIosDevice();
   const standalone = isStandaloneDisplay();
+  const secure = window.isSecureContext !== false;
   const hasPush = 'serviceWorker' in navigator && 'PushManager' in window;
   const hasNotification = 'Notification' in window;
-  const ios = isIosDevice();
+  const iosVersion = ios ? parseIosVersion() : null;
+  const canSubscribe = secure && hasPush && hasNotification;
+  const needsInstall = ios && !standalone;
+
+  let reason = 'ok';
+  if (!secure) reason = 'insecure';
+  else if (ios && !standalone) reason = 'ios-needs-install';
+  else if (ios && iosVersion && (iosVersion.major < 16 || (iosVersion.major === 16 && iosVersion.minor < 4))) {
+    reason = 'ios-outdated';
+  } else if (!canSubscribe) reason = 'unsupported';
+
   return {
     ios,
     standalone,
-    canSubscribe: hasPush && hasNotification,
-    needsInstall: ios && !standalone,
+    secure,
+    hasPush,
+    hasNotification,
+    iosVersion,
+    canSubscribe,
+    needsInstall,
+    reason,
   };
+}
+
+/** Message court expliquant pourquoi le push est indisponible. */
+export function pushUnavailableMessage(ctx = detectPushContext()) {
+  const version = formatIosVersion(ctx.iosVersion);
+  switch (ctx.reason) {
+    case 'insecure':
+      return 'Les push exigent HTTPS : ouvre Matchday depuis son adresse https:// (pas une IP locale).';
+    case 'ios-needs-install':
+      return 'Sur iPhone, Safari ne gère pas les push. Ajoute Matchday à l’écran d’accueil (Partager → Sur l’écran d’accueil), puis ouvre l’icône.';
+    case 'ios-outdated':
+      return `Les push iPhone demandent iOS 16.4 ou plus${version ? ` (ton iPhone : iOS ${version})` : ''}. Mets à jour iOS dans Réglages → Général → Mise à jour logicielle.`;
+    case 'unsupported':
+      return ctx.ios
+        ? 'Matchday ne reçoit pas encore les push. Ferme complètement l’app, rouvre-la depuis l’icône de l’écran d’accueil, puis réessaie.'
+        : 'Ce navigateur ne gère pas les push. Utilise Chrome, Edge ou Firefox à jour.';
+    default:
+      return null;
+  }
 }
 
 async function getVapidPublicKeyCached() {
@@ -217,14 +270,17 @@ export async function showLocalTestNotification() {
   );
 }
 
+const PUSH_SHORT_REASON = {
+  insecure: 'Push : HTTPS requis (pas une IP locale)',
+  'ios-needs-install': 'Sur iPhone : installe l’app (Partager → Écran d’accueil), puis ouvre l’icône',
+  'ios-outdated': 'Push iPhone : iOS 16.4+ requis — mets à jour iOS',
+  unsupported: 'Push indisponible sur ce navigateur',
+};
+
 export async function enablePushNotifications() {
   const ctx = detectPushContext();
-  if (ctx.needsInstall) {
-    showToast('Sur iPhone : Partager → Sur l’écran d’accueil, puis ouvre l’icône Matchday');
-    return false;
-  }
-  if (!ctx.canSubscribe) {
-    showToast('Push indisponible sur ce navigateur');
+  if (ctx.reason !== 'ok') {
+    showToast(PUSH_SHORT_REASON[ctx.reason] || pushUnavailableMessage(ctx));
     return false;
   }
 
@@ -314,8 +370,9 @@ function applicationServerKeyMatches(subscription, publicKey) {
 export async function syncPushIfEnabled() {
   if (!notificationsEnabled()) return;
   const ctx = detectPushContext();
-  if (ctx.needsInstall) return;
-  if (!ctx.canSubscribe || Notification.permission !== 'granted') {
+  // Sur iPhone hors PWA / iOS trop ancien : on garde le réglage, rien à synchroniser.
+  if (ctx.reason === 'ios-needs-install' || ctx.reason === 'ios-outdated') return;
+  if (ctx.reason !== 'ok' || Notification.permission !== 'granted') {
     localStorage.setItem('matchday_notifications', 'off');
     return;
   }
@@ -369,14 +426,24 @@ export function openNotificationPanel(anchorEl, { onEnabled, onDisabled }) {
     const panel = document.createElement('div');
     panel.id = 'notif-panel';
     panel.className = 'notif-panel';
-    const installHint = status.needsInstall
+    const unavailable = status.reason !== 'ok';
+    const installHint = status.reason === 'ios-needs-install'
       ? `<p class="notif-panel-hint notif-panel-warn">Sur iPhone, Safari ne peut pas recevoir les push. Installe l’app :</p>
          <ol class="notif-panel-steps">
            <li>Bouton <strong>Partager</strong> (carré + flèche)</li>
            <li><strong>Sur l’écran d’accueil</strong></li>
            <li>Ouvre Matchday depuis l’icône, puis reviens ici</li>
          </ol>`
-      : `<p class="notif-panel-hint">Rappels : chaque matin (matchs du jour) et ~1h avant le coup d'envoi si tu n'as pas pronostiqué.</p>`;
+      : unavailable
+        ? `<p class="notif-panel-hint notif-panel-warn">${pushUnavailableMessage(status)}</p>`
+        : `<p class="notif-panel-hint">Rappels : chaque matin (matchs du jour) et ~1h avant le coup d'envoi si tu n'as pas pronostiqué.</p>`;
+
+    const context = [
+      status.ios ? `iOS ${formatIosVersion(status.iosVersion) ?? '?'}` : 'hors iOS',
+      status.standalone ? 'écran d’accueil' : 'navigateur',
+      status.secure ? 'HTTPS' : 'HTTP',
+      status.hasPush ? 'Push API ok' : 'Push API absente',
+    ].join(' · ');
 
     panel.innerHTML = `
       <div class="notif-panel-head"><strong>Rappels Matchday</strong></div>
@@ -385,8 +452,9 @@ export function openNotificationPanel(anchorEl, { onEnabled, onDisabled }) {
       <div class="notif-panel-row">Serveur VAPID : <span class="${status.vapidConfigured ? 'notif-ok' : 'notif-warn'}">${status.vapidConfigured ? 'ok' : 'manquant'}</span></div>
       ${!status.vapidConfigured ? `<p class="notif-panel-hint notif-panel-warn">Ajoute <code>VAPID_PUBLIC_KEY</code> et <code>VAPID_PRIVATE_KEY</code> dans les variables Render (ou ton <code>.env</code> local). Génère-les avec <code>npm run vapid:keys</code>.</p>` : ''}
       ${installHint}
+      <div class="notif-panel-row notif-panel-context">Contexte : <span>${context}</span></div>
       <div class="notif-panel-actions">
-        ${status.needsInstall
+        ${unavailable
           ? ''
           : status.enabled
             ? `<button type="button" class="btn btn-secondary" id="notif-test">Tester</button>

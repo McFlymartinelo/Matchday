@@ -2131,6 +2131,7 @@ html[data-theme="dark"] .toast-default {
 .notif-panel-head { font-family: 'Baloo 2', sans-serif; margin-bottom: 10px; }
 .notif-panel-row { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 4px; }
 .notif-panel-row span { color: var(--ink); }
+.notif-panel-context { font-size: 10px; opacity: .75; margin-top: 8px; }
 .notif-ok { color: var(--l1) !important; }
 .notif-warn { color: var(--liga) !important; }
 .notif-panel-warn { color: var(--liga); font-weight: 600; }

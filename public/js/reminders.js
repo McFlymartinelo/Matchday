@@ -1,5 +1,5 @@
 import { matches, showToast } from './api.js';
-import { showSystemNotification, notificationsEnabled } from './notifications.js';
+import { showSystemNotification, notificationsEnabled } from './notifications.js?v=4';
 
 const REMINDER_MIN = Number(localStorage.getItem('matchday_reminder_min') || 55);
 const REMINDER_MAX = Number(localStorage.getItem('matchday_reminder_max') || 65);
