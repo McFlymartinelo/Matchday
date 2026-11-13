@@ -2107,7 +2107,7 @@ html[data-theme="dark"] .toast-default {
 .reminder-banner {
   position: fixed; top: 0; left: 0; right: 0; z-index: 300;
   background: linear-gradient(135deg, #6B3FD6, #1C6FD0);
-  color: white; padding: 12px 14px; box-shadow: 0 8px 24px rgba(43,38,64,0.25);
+  color: white; padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 12px; box-shadow: 0 8px 24px rgba(43,38,64,0.25);
   animation: slideDown .3s ease;
 }
 @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
