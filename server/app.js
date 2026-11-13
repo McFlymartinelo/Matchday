@@ -72,13 +72,25 @@ export function createApp() {
     }
   });
 
+  const publicDir = join(__dirname, '../public');
   app.get('/manifest.json', (_req, res) => {
     res.type('application/manifest+json');
-    res.sendFile(join(__dirname, '../public/manifest.json'));
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(join(publicDir, 'manifest.json'));
   });
-  app.use(express.static(join(__dirname, '../public')));
+  app.use(express.static(publicDir, {
+    setHeaders(res, filePath) {
+      const name = filePath.replace(/\\/g, '/');
+      // HTML / manifest / SW doivent toujours être revalidés : ce sont eux
+      // qui portent les `?v=` des assets et déclenchent les mises à jour.
+      if (name.endsWith('/index.html') || name.endsWith('/manifest.json') || name.endsWith('/sw.js')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
   app.get('*', (_req, res) => {
-    res.sendFile(join(__dirname, '../public/index.html'));
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(join(publicDir, 'index.html'));
   });
 
   return app;

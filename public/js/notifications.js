@@ -101,8 +101,21 @@ function handleServiceWorkerMessage(event) {
 }
 
 if ('serviceWorker' in navigator) {
+  const hadSwController = !!navigator.serviceWorker.controller;
+  let swReloading = false;
+
+  // Quand une nouvelle version du SW prend le contrôle (déploiement), on
+  // recharge une fois pour charger le nouvel index.html + les nouveaux `?v=`.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadSwController || swReloading) return;
+    swReloading = true;
+    window.location.reload();
+  });
+
   navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
-  navigator.serviceWorker.register(SW_URL, SW_REGISTER_OPTS).catch(() => {});
+  navigator.serviceWorker.register(SW_URL, SW_REGISTER_OPTS)
+    .then(reg => reg.update().catch(() => {}))
+    .catch(() => {});
   getVapidPublicKeyCached().catch(() => {});
 }
 
@@ -479,7 +492,7 @@ export function openNotificationPanel(anchorEl, { onEnabled, onDisabled }) {
     });
     panel.querySelector('#notif-test')?.addEventListener('click', async () => {
       await sendTestPushFromApp();
-      const { demoReminder } = await import('./reminders.js');
+      const { demoReminder } = await import('./reminders.js?v=2');
       demoReminder(onEnabled);
     });
     panel.querySelector('#notif-off')?.addEventListener('click', async () => {
